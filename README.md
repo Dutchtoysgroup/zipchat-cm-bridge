@@ -115,6 +115,13 @@ Verder nodig:
 - een routingregel die naar **Agent Inbox** gaat; het `stateNameId` daarvan
   invullen als `CM_AGENT_STATE_NAME_ID`;
 - een **product token** met recht `ConversationalRouter.RouterSession_Update`.
+  Te vinden in het CM-platform: profielicoon rechtsboven → **Channels** →
+  **Gateway** in het linkermenu. Let op: dit is *niet* hetzelfde als de
+  producttokens in HALO — die zijn HALO-scoped, en "MSC Voice" is voor
+  voice-handovers, niet voor tekstrouting.
+
+De TwoWay-adapter weigert onbevoegde calls met een kale `401` zonder
+`WWW-Authenticate`-header, dus zonder dit token komt er niets door.
 
 ### Waarom het Event Endpoint zijn geheim in de URL heeft
 
@@ -168,6 +175,14 @@ installeren, met twee variabelen: `MSC_BRIDGE_URL` en `MSC_BRIDGE_SECRET`.
 `ZIPCHAT_SENDER_ID` is de Zipchat-gebruiker waaronder MSC-antwoorden in de
 widget verschijnen — maak daarvoor een teamlid aan met een neutrale naam
 ("Klantenservice"), want die naam ziet de klant.
+
+De beschikbare gebruikers haal je op met een endpoint dat niet in de Zipchat-
+documentatie staat, maar wel werkt:
+
+```bash
+curl -s "https://app.zipchat.ai/api/integrations/backend_api/v1/chats/<chat_id>/users" \
+  -H "Authorization: Bearer $ZIPCHAT_API_TOKEN"
+```
 
 ## Nog te verifiëren tegen de live API
 

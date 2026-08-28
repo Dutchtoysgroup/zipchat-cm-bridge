@@ -4,6 +4,7 @@ import { store } from "@/db";
 import { config } from "@/lib/config";
 import * as zipchat from "@/lib/zipchat";
 import * as cm from "@/lib/cm";
+import { sendEscalationMail } from "@/lib/notify";
 
 export const dynamic = "force-dynamic";
 
@@ -126,6 +127,31 @@ export async function POST(req: Request) {
       if (!body.sessionId) return NextResponse.json({ ok: false, error: "Kies eerst een sessie." }, { status: 400 });
       const result = await closeSession(body.sessionId, true);
       return NextResponse.json(result);
+    }
+
+    /* -------- Testmail -------- */
+    case "mail": {
+      const res = await sendEscalationMail({
+        name: body.name || "Testklant",
+        email: body.email || "test@example.com",
+        reason: "Testmail vanuit het dashboard",
+        summary: "Dit is een test om te controleren of de escalatiemail aankomt. Geen actie nodig.",
+        transcript: "Klant: test\nAI: test",
+        channel: "webchat",
+        sessionId: 0,
+      });
+      await store.logEvent({
+        direction: "internal",
+        kind: res.ok ? "test.mail_sent" : "test.mail_failed",
+        ok: res.ok,
+        summary: res.ok ? `Testmail verstuurd via ${res.via}` : `Testmail mislukt: ${res.error}`,
+      });
+      return NextResponse.json({
+        ok: res.ok,
+        message: res.ok
+          ? `Testmail verstuurd via ${res.via}. Controleer de inbox.`
+          : `Testmail mislukt: ${res.error}`,
+      });
     }
 
     /* -------- Testdata wissen -------- */

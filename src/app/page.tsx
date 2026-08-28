@@ -11,6 +11,7 @@ type Health = {
   lastWebhookAt: string | null;
   lastPollAt: string | null;
   poll: { windowMs: number; intervalMs: number };
+  mail: { to: string | null; configured: boolean };
 };
 
 type Session = {
@@ -215,6 +216,14 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="stat">
+            <div className="k">Escalatiemail</div>
+            <div className="v">
+              <span className={`badge ${health?.mail?.configured ? "ok" : "err"}`}>
+                {health ? (health.mail.configured ? health.mail.to : "niet ingesteld") : "…"}
+              </span>
+            </div>
+          </div>
+          <div className="stat">
             <div className="k">Open gesprekken</div>
             <div className="v">{health?.openSessions ?? "…"}</div>
           </div>
@@ -276,6 +285,9 @@ export default function Dashboard() {
           </button>
           <button disabled={!!busy} onClick={() => run("poll")}>
             {busy === "poll" ? "Bezig…" : "Nu pollen"}
+          </button>
+          <button disabled={!!busy} onClick={() => run("mail", { name, email })}>
+            {busy === "mail" ? "Bezig…" : "Testmail sturen"}
           </button>
           <button disabled={!!busy} onClick={() => run("reset")}>Testdata wissen</button>
         </div>

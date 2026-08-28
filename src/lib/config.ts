@@ -78,6 +78,20 @@ export const config = {
     idleTimeoutMin: Number(opt("POLL_IDLE_TIMEOUT_MIN") ?? 60),
   },
 
+  /** Notificatie per e-mail, los van de CM-routing. */
+  mail: {
+    /** Waar de escalaties heen gaan. */
+    to: opt("ESCALATION_EMAIL_TO"),
+    from: opt("ESCALATION_EMAIL_FROM"),
+    /** Resend heeft de voorkeur: puur HTTP, geen verbinding om open te houden. */
+    resendApiKey: opt("RESEND_API_KEY"),
+    /** Alternatief: smtp://gebruiker:wachtwoord@host:587 */
+    smtpUrl: opt("SMTP_URL"),
+    get configured(): boolean {
+      return !!this.to && (!!this.resendApiKey || !!this.smtpUrl);
+    },
+  },
+
   databaseUrl: opt("DATABASE_URL"),
 } as const;
 

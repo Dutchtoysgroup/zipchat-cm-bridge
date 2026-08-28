@@ -22,6 +22,13 @@ export async function GET() {
   if (!config.bridgeSecret) warnings.push("BRIDGE_SHARED_SECRET niet gezet — /api/zipchat/escalate is onbeveiligd.");
   if (!config.cm.webhookSecret) warnings.push("CM_WEBHOOK_SECRET niet gezet — de CM-webhook is onbeveiligd.");
   if (store.kind === "memory") warnings.push("Geen DATABASE_URL — opslag is in-memory en verdwijnt bij herstart.");
+  if (!config.mail.to) {
+    warnings.push("ESCALATION_EMAIL_TO niet gezet — er gaat geen e-mail naar de klantenservice.");
+  } else if (!config.mail.configured) {
+    warnings.push(
+      `Geen RESEND_API_KEY of SMTP_URL — escalaties bereiken ${config.mail.to} NIET. De klant krijgt wel te horen dat er gereageerd wordt.`,
+    );
+  }
 
   const lastWebhook = events.find((e) => e.direction === "cm->bridge");
   const lastPoll = events.find((e) => e.kind.startsWith("poll."));
@@ -31,6 +38,7 @@ export async function GET() {
     mockMode: config.mockMode,
     mockZipchat: config.mockZipchat,
     mockCm: config.mockCm,
+    mail: { to: config.mail.to ?? null, configured: config.mail.configured },
     storage: store.kind,
     openSessions: open.length,
     missing,

@@ -2,6 +2,7 @@ import { config, type Channel } from "./config";
 import { store, type Session } from "@/db";
 import * as zipchat from "./zipchat";
 import * as cm from "./cm";
+import { sendEscalationMail } from "./notify";
 
 /* ------------------------------------------------------------- Escaleren */
 
@@ -84,7 +85,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
       message:
         existing.mode === "livechat"
           ? "Dit gesprek staat al bij een medewerker; zeg dat een collega het al heeft opgepakt."
-          : "De vraag is al doorgegeven; zeg dat er per e-mail antwoord komt en dat het niet nog een keer hoeft.",
+          : "De vraag is al doorgegeven; zeg dat een collega zo snel mogelijk per e-mail reageert en dat het niet nog een keer hoeft.",
     };
   }
 
@@ -203,6 +204,41 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     return { ok: false, sessionId: session.id, message: `Doorzetten naar CM mislukt: ${sent.error}` };
   }
 
+  // 5b. Onafhankelijk van CM: de klantenservice per e-mail op de hoogte stellen.
+  // Dit pad blijft werken ook als de router onderweg iets laat liggen.
+  const mail = await sendEscalationMail({
+    name,
+    email,
+    reason: input.reason,
+    summary: input.summary,
+    transcript: messages.length ? zipchat.formatTranscript(messages) : null,
+    channel,
+    sessionId: session.id,
+  });
+  await store.logEvent({
+    sessionId: session.id,
+    direction: "internal",
+    kind: mail.ok ? "escalate.mail_sent" : "escalate.mail_failed",
+    ok: mail.ok,
+    summary: mail.ok
+      ? `Escalatiemail verstuurd naar ${config.mail.to} via ${mail.via}`
+      : `Escalatiemail NIET verstuurd: ${mail.error}`,
+  });
+
+  // Zipchat's eigen escalatievlag zetten: die kan een notificatie sturen
+  // volgens de instellingen in het dashboard, los van onze eigen mail.
+  if (hasConversation) {
+    const flag = await zipchat.setEscalation(conversationId, false, chatId);
+    await store.logEvent({
+      sessionId: session.id,
+      direction: "bridge->zipchat",
+      kind: "escalate.flagged",
+      ok: flag.ok,
+      statusCode: flag.status,
+      summary: flag.ok ? "Gesprek in Zipchat als geëscaleerd gemarkeerd" : `Markeren mislukt: ${flag.error}`,
+    });
+  }
+
   if (realChatId !== cmChat.id) {
     await store.updateSession(session.id, { cmChatId: realChatId });
     cmChat.id = realChatId;
@@ -235,7 +271,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     mocked: sent.mocked,
     message: liveChat
       ? "Doorgezet. Zeg tegen de klant dat een collega het gesprek nu overneemt en dat die hier in de chat antwoordt."
-      : `Doorgezet. Zeg tegen de klant dat de klantenservice op dit moment niet live meekijkt, dat de vraag is doorgegeven, en dat er per e-mail${email ? ` (${email})` : ""} antwoord komt zodra een collega beschikbaar is.`,
+      : `Doorgezet. Zeg tegen de klant dat de vraag is doorgegeven aan de klantenservice, dat er op dit moment niemand live meekijkt in de chat, en dat een collega zo snel mogelijk per e-mail${email ? ` (${email})` : ""} reageert.`,
   };
 }
 
@@ -314,7 +350,12 @@ export async function handleAgentReply(payload: cm.TwoWayPayload): Promise<{ ok:
 /* --------------------------------------- Klantberichten pollen (Zipchat heeft geen webhook) */
 
 export async function pollOnce(): Promise<{ checked: number; forwarded: number; closed: number }> {
-  const open = await store.listOpenSessions();
+  // Alleen live-chatsessies met een echt Zipchat-gesprek zijn de moeite waard.
+  // In e-mailmodus praat de klant gewoon door met de AI; die berichten horen
+  // niet bij CM. En een sessie zonder gespreks-id heeft niets om op te halen.
+  const open = (await store.listOpenSessions()).filter(
+    (s) => s.mode === "livechat" && !s.zipchatConversationId.startsWith("zonder-id-"),
+  );
   let forwarded = 0;
   let closed = 0;
 
@@ -325,14 +366,23 @@ export async function pollOnce(): Promise<{ checked: number; forwarded: number; 
       sinceIso,
     });
     if (!conv.ok) {
+      // Een 404 verandert niet bij de volgende poging; blijven proberen levert
+      // alleen een logboek vol ruis op.
+      const gone = conv.status === 404;
       await store.logEvent({
         sessionId: session.id,
         direction: "zipchat->bridge",
-        kind: "poll.failed",
+        kind: gone ? "poll.conversation_gone" : "poll.failed",
         ok: false,
         statusCode: conv.status,
-        summary: conv.error,
+        summary: gone
+          ? "Zipchat kent dit gesprek niet (meer) — sessie gesloten, niet opnieuw geprobeerd"
+          : conv.error,
       });
+      if (gone) {
+        await store.updateSession(session.id, { status: "closed" });
+        closed++;
+      }
       continue;
     }
 

@@ -53,7 +53,7 @@ export const config = {
     adapterId: opt("CM_ADAPTER_ID"),
     productToken: opt("CM_PRODUCT_TOKEN"),
     /** Kanaalnaam die CM in het chat-object verwacht. */
-    channel: opt("CM_CHANNEL") ?? "Custom",
+    channel: opt("CM_CHANNEL") ?? "CXWebConversations",
     /** stateNameId van de agent-state in de router (handover naar mens). */
     agentStateNameId: opt("CM_AGENT_STATE_NAME_ID"),
     /** stateNameId om terug te zetten naar de bot, indien gebruikt. */

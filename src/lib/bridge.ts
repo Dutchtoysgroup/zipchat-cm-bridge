@@ -123,13 +123,21 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   };
 
   const sent = await cm.sendToRouter(payload);
+
+  // CM negeert het chat-id dat wij meesturen en hanteert een eigen, uit
+  // conversationClientId afgeleid id. Dát is het id waarmee zijn callbacks
+  // terugkomen, dus dat moeten we vastleggen.
+  const realChatId = cm.chatIdFromAck(sent) ?? cmChat.id;
+
   await store.logEvent({
     sessionId: session.id,
     direction: "bridge->cm",
     kind: "escalate.to_router",
     ok: sent.ok,
     statusCode: sent.status,
-    summary: sent.ok ? "Transcript naar Conversational Router gestuurd" : `Naar CM sturen mislukt: ${sent.error}`,
+    summary: sent.ok
+      ? `Transcript naar Conversational Router gestuurd (CM-chat ${realChatId})`
+      : `Naar CM sturen mislukt: ${sent.error}`,
     payload,
   });
 
@@ -138,12 +146,17 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     return { ok: false, sessionId: session.id, message: `Doorzetten naar CM mislukt: ${sent.error}` };
   }
 
+  if (realChatId !== cmChat.id) {
+    await store.updateSession(session.id, { cmChatId: realChatId });
+    cmChat.id = realChatId;
+  }
+
   // 5. Router expliciet naar de agent-state duwen (indien geconfigureerd).
   if (config.cm.agentStateNameId) {
     const ctx: Record<string, string> = { channel, source: "zipchat" };
     if (email) ctx.email = email;
     if (name) ctx.name = name;
-    const state = await cm.setSessionState(cmChat.id, config.cm.agentStateNameId, ctx);
+    const state = await cm.setSessionState(realChatId, config.cm.agentStateNameId, ctx);
     await store.logEvent({
       sessionId: session.id,
       direction: "bridge->cm",
@@ -160,7 +173,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   return {
     ok: true,
     sessionId: session.id,
-    cmChatId: cmChat.id,
+    cmChatId: realChatId,
     mocked: sent.mocked,
     message: "Doorgezet naar een medewerker.",
   };
@@ -317,15 +330,20 @@ export async function closeSession(sessionId: number, backToAi = true) {
 
 /* ------------------------------------------------------------------ Utils */
 
+/**
+ * CM accepteert alleen kanalen uit een vaste lijst — "Email" en "Custom" zitten
+ * daar niet in. Alles wat via deze bridge binnenkomt is voor de router
+ * webverkeer; het echte kanaal staat in de begeleidende tekst.
+ */
 function mapChannel(c: Channel): string {
-  // CM verwacht een kanaalnaam; webchat via ons loopt als custom kanaal binnen.
   const map: Record<Channel, string> = {
     webchat: config.cm.channel,
-    email: "Email",
+    email: config.cm.channel,
     sms: "SMS",
     whatsapp: "WhatsApp",
   };
-  return map[c] ?? config.cm.channel;
+  const v = map[c] ?? config.cm.channel;
+  return cm.isValidChannel(v) ? v : config.cm.channel;
 }
 
 function isAfter(iso: string | undefined, sinceIso: string): boolean {

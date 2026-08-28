@@ -15,7 +15,8 @@ export type TwoWayChat = {
 };
 
 export type TwoWayTextMessage = {
-  $type: "Text";
+  /** Kleine letters: CM's deserializer herkent "Text" niet, "text" wel. */
+  $type: "text";
   id?: string;
   direction: "ClientOriginated" | "ClientTerminated";
   createdOn?: string;
@@ -30,7 +31,23 @@ export type TwoWayPayload = {
 };
 
 /**
- * chat.id is volgens de CM-docs een hash van client-id, host-id en kanaal.
+ * De kanalen die de router accepteert. Er zit geen "Custom" tussen: een eigen
+ * webchat loopt binnen als CXWebConversations.
+ */
+export const CM_CHANNELS = [
+  "Apple Business Chat", "iMessage", "WhatsApp", "Line", "Push", "RCS", "SMS",
+  "Viber", "Voice", "Facebook Messenger", "MobilePush", "CXWebConversations",
+  "Instagram", "Telegram Messenger", "Slack", "Microsoft Teams",
+] as const;
+
+export function isValidChannel(c: string): boolean {
+  return (CM_CHANNELS as readonly string[]).includes(c);
+}
+
+/**
+ * chat.id moet gevuld zijn, maar CM negeert onze waarde en leidt zijn eigen id
+ * deterministisch af uit conversationClientId. Het id uit het 201-antwoord is
+ * dus leidend — daarmee komen de callbacks terug.
  * We leiden 'm deterministisch af zodat dezelfde klant altijd dezelfde chat krijgt.
  */
 export function deriveChatId(clientId: string, hostId: string, channel: string): string {
@@ -59,7 +76,7 @@ export function textMessage(
   text: string,
   direction: TwoWayTextMessage["direction"] = "ClientOriginated",
 ): TwoWayTextMessage {
-  return { $type: "Text", direction, createdOn: new Date().toISOString(), text };
+  return { $type: "text", direction, createdOn: new Date().toISOString(), text };
 }
 
 /* --------------------------------------------------------------- Outbound */
@@ -72,10 +89,17 @@ function mock<T>(data: T): ApiResult<T> {
   return { ok: true, status: 202, data, mocked: true };
 }
 
-/** Stuur berichten naar de Conversational Router (en daarmee richting MSC). */
-export async function sendToRouter(payload: TwoWayPayload): Promise<ApiResult<unknown>> {
-  if (config.mockCm) return mock({ note: "mock-modus: niet echt naar CM verstuurd", payload });
-  return requestJson(twowayUrl(), {
+export type RouterAck = { chat?: { id?: string; sessionId?: string | null }; message?: string };
+
+/**
+ * Stuur berichten naar de Conversational Router (en daarmee richting MSC).
+ * Bij succes (201) staat in het antwoord het chat-id dat CM zelf hanteert.
+ */
+export async function sendToRouter(payload: TwoWayPayload): Promise<ApiResult<RouterAck>> {
+  if (config.mockCm) {
+    return mock<RouterAck>({ chat: { id: payload.chat.id }, message: "mock: niet echt verstuurd" });
+  }
+  return requestJson<RouterAck>(twowayUrl(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -83,6 +107,11 @@ export async function sendToRouter(payload: TwoWayPayload): Promise<ApiResult<un
     },
     body: JSON.stringify(payload),
   });
+}
+
+/** Het chat-id zoals CM het hanteert, uit een 201-antwoord. */
+export function chatIdFromAck(res: ApiResult<RouterAck>): string | undefined {
+  return res.data?.chat?.id ?? undefined;
 }
 
 /* --------------------------------------------------------- Routing control */
@@ -128,7 +157,7 @@ export async function endSession(cmChatId: string): Promise<ApiResult<unknown>> 
 /** Haal de bruikbare tekstberichten uit een inkomende TwoWay-payload. */
 export function extractInboundTexts(payload: TwoWayPayload): string[] {
   return (payload.conversationMessages ?? [])
-    .filter((m) => m.$type === "Text" && typeof m.text === "string" && m.text.trim() !== "")
+    .filter((m) => String(m.$type).toLowerCase() === "text" && typeof m.text === "string" && m.text.trim() !== "")
     // ClientTerminated = richting klant, dus afkomstig van de agent in MSC.
     .filter((m) => m.direction !== "ClientOriginated")
     .map((m) => m.text.trim());
@@ -147,6 +176,17 @@ export async function ping(): Promise<ApiResult<unknown>> {
   });
   if (res.status === 404) {
     return { ok: true, status: 404, data: { note: "Token geaccepteerd (404 op testchat is verwacht)" } };
+  }
+  if (res.status === 403) {
+    return {
+      ok: true,
+      status: 403,
+      data: {
+        note:
+          "Token werkt voor berichten, maar mist het recht " +
+          "ConversationalRouter.RouterSession_Update. Alleen nodig voor expliciete state changes.",
+      },
+    };
   }
   return res;
 }

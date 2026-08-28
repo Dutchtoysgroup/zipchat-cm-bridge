@@ -13,6 +13,15 @@ function presented(req: Request, header: string): string | null {
   if (direct) return direct.trim();
   const auth = req.headers.get("authorization");
   if (auth?.toLowerCase().startsWith("bearer ")) return auth.slice(7).trim();
+  // Laatste optie: een token in de querystring. Nodig voor CM's Event
+  // Endpoint, dat geen headers kan meesturen — daar is de URL de enige plek
+  // waar we een geheim kwijt kunnen.
+  try {
+    const q = new URL(req.url).searchParams.get("token");
+    if (q) return q.trim();
+  } catch {
+    /* geen geldige URL: val door naar null */
+  }
   return null;
 }
 

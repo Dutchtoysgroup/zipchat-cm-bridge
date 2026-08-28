@@ -57,10 +57,12 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   const chatId = input.chatId ?? config.zipchat.chatId ?? "unknown-chat";
   const channel: Channel = input.channel ?? "webchat";
   const hasConversation = !!input.conversationId;
-  const mode = await getMode();
-  // In e-mailmodus zit er niemand in de chat: dan de AI niet pauzeren, want
-  // dan staat de klant helemaal met lege handen.
-  const liveChat = mode === "livechat" && hasConversation;
+  const setting = await getMode();
+  // Live chat kan alleen als er iemand klaarstaat én we een gesprek hebben om
+  // antwoorden in terug te leggen. Ontbreekt één van beide, dan is het e-mail —
+  // en dat moet ook zo in de administratie staan, niet alleen in de belofte.
+  const liveChat = setting === "livechat" && hasConversation;
+  const mode: HandoverMode = liveChat ? "livechat" : "email";
 
   // Zonder gespreks-id kunnen we geen transcript ophalen en geen antwoorden
   // terugbezorgen, maar het ticket moet er wél komen.
@@ -147,9 +149,9 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
       ? pause.ok
         ? "AI gepauzeerd (manual mode)"
         : `AI pauzeren mislukt: ${pause.error}`
-      : mode === "email"
-        ? "E-mailmodus — AI blijft actief, medewerker reageert per e-mail"
-        : "Geen gespreks-id — AI niet gepauzeerd, eenrichtingsticket",
+      : setting === "livechat" && !hasConversation
+        ? "Stond op live chat, maar zonder gespreks-id kan dat niet — als e-mail afgehandeld"
+        : "E-mailmodus — AI blijft actief, medewerker reageert per e-mail",
   });
 
   // 4. Context + transcript als één openingsbericht naar de router.

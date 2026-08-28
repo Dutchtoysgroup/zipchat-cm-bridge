@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { escalate, handleAgentReply, pollOnce, closeSession } from "@/lib/bridge";
+import { escalate, handleAgentReply, handleHandover, pollOnce, closeSession } from "@/lib/bridge";
 import { store } from "@/db";
 import { config } from "@/lib/config";
 import * as zipchat from "@/lib/zipchat";
@@ -86,6 +86,19 @@ export async function POST(req: Request) {
         ],
       };
       const result = await handleAgentReply(payload);
+      return NextResponse.json(result);
+    }
+
+    /* -------- Handover-notificatie van de router -------- */
+    case "handover": {
+      if (!body.sessionId) return NextResponse.json({ ok: false, error: "Kies eerst een sessie." }, { status: 400 });
+      const session = await store.getSessionById(body.sessionId);
+      if (!session) return NextResponse.json({ ok: false, error: "Sessie niet gevonden." }, { status: 404 });
+      const result = await handleHandover({
+        chat: { id: session.cmChatId, conversationClientId: session.cmConversationClientId },
+        eventType: body.text?.trim() || "agentAssigned",
+        agent: { name: "Medewerker Klantenservice" },
+      });
       return NextResponse.json(result);
     }
 

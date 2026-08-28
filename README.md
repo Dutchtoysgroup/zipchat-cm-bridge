@@ -56,6 +56,7 @@ dus een Neon-database aanmaken en `npm run db:push` draaien.
 |---|---|---|
 | `POST /api/zipchat/escalate` | de Zipchat custom tool | escalatie starten |
 | `POST /api/cm/webhook` | de Conversational Router | agent-antwoord bezorgen |
+| `POST /api/cm/handover` | de Conversational Router | handover-status bijwerken |
 | `GET /api/poll` | Vercel Cron | klantberichten doorsturen |
 | `GET /api/health` | dashboard | configuratie- en statuscheck |
 | `GET /api/sessions` · `GET /api/events` | dashboard | data |
@@ -68,15 +69,39 @@ dashboard erover.
 
 ## Wat er aan de CM-kant moet gebeuren
 
-1. In de Conversational Router een **TwoWay-adapter** aanmaken. De URL die je
-   terugkrijgt heeft de vorm
-   `https://api.conversational.cm.com/conversational/twoway/v2/accounts/{technicalLinkId}/adapters/{adapterId}`
-   — die twee id's vullen `CM_ACCOUNT_ID` en `CM_ADAPTER_ID`.
-2. Bij die adapter de **webhook-URL** van deze bridge instellen:
-   `https://<jouw-deploy>/api/cm/webhook`.
-3. Een routingregel die naar **Agent Inbox** gaat; het `stateNameId` daarvan
-   invullen als `CM_AGENT_STATE_NAME_ID`.
-4. Een **product token** met recht `ConversationalRouter.RouterSession_Update`.
+Maak in de Conversational Router een **TwoWay-adapter** aan en vul het formulier zo:
+
+| Veld | Waarde |
+|---|---|
+| Name | bijv. `Zipchat bridge` |
+| **Is Bot** | **uit** — Zipchat is de bot en staat buiten de router; deze adapter is de kanaalkant |
+| Message Endpoint › Url | `https://<jouw-deploy>/api/cm/webhook` |
+| Message Endpoint › Method | `POST` |
+| Message Endpoint › Add header | naam `X-Bridge-Token`, waarde = je `CM_WEBHOOK_SECRET` |
+| Hand Over Endpoint › Url | `https://<jouw-deploy>/api/cm/handover` |
+| Hand Over Endpoint › Add header | dezelfde `X-Bridge-Token` |
+
+Na opslaan krijg je de adapter-URL in de vorm
+`https://api.conversational.cm.com/conversational/twoway/v2/accounts/{technicalLinkId}/adapters/{adapterId}`.
+Die twee id's vullen `CM_ACCOUNT_ID` en `CM_ADAPTER_ID`.
+
+Verder nodig:
+
+- een routingregel die naar **Agent Inbox** gaat; het `stateNameId` daarvan
+  invullen als `CM_AGENT_STATE_NAME_ID`;
+- een **product token** met recht `ConversationalRouter.RouterSession_Update`.
+
+### Over het Hand Over Endpoint
+
+CM meldt hier wanneer een gesprek naar een medewerker gaat. De bridge werkt
+daarmee de sessie bij en toont de naam van de medewerker in het dashboard.
+
+De bridge zegt standaard **niet** tegen de klant dat er is doorverbonden. Dat is
+bewust: een "je bent verbonden"-melding bij een handover die vervolgens niemand
+oppakt, is erger dan geen melding. Zet `CM_HANDOVER_NOTIFY_CUSTOMER=true` pas
+als je zeker weet dat er altijd iemand oppakt — dan meldt de bridge het
+uitsluitend bij een bevestigde toewijzing, nooit bij `noAgentAvailable` of een
+wachtrij.
 
 ## Wat er aan de Zipchat-kant moet gebeuren
 

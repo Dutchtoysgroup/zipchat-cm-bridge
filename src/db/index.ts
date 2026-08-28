@@ -126,6 +126,8 @@ class MemoryStore implements Store {
       channel: "webchat",
       status: "escalating",
       reason: null,
+      handoverState: null,
+      agentName: null,
       lastForwardedAt: null,
       lastAgentReplyAt: null,
       ...s,

@@ -22,6 +22,8 @@ type Session = {
   channel: string;
   status: string;
   reason: string | null;
+  handoverState: string | null;
+  agentName: string | null;
   updatedAt: string;
 };
 
@@ -230,6 +232,12 @@ export default function Dashboard() {
           >
             {busy === "agent_reply" ? "Bezig…" : "Agent antwoordt"}
           </button>
+          <button
+            disabled={!!busy || !selected}
+            onClick={() => run("handover", { sessionId: selected })}
+          >
+            {busy === "handover" ? "Bezig…" : "Handover-melding"}
+          </button>
           <button disabled={!!busy || !selected} onClick={() => run("close", { sessionId: selected })}>
             Sessie sluiten
           </button>
@@ -253,6 +261,7 @@ export default function Dashboard() {
                   <th>E-mail</th>
                   <th>Kanaal</th>
                   <th>Status</th>
+                  <th>Medewerker</th>
                   <th>Zipchat-gesprek</th>
                   <th>CM-chat</th>
                   <th>Bijgewerkt</th>
@@ -271,6 +280,12 @@ export default function Dashboard() {
                     <td className="dim">{s.customerEmail ?? "—"}</td>
                     <td>{s.channel}</td>
                     <td><span className={`badge ${statusClass(s.status)}`}>{s.status}</span></td>
+                    <td>
+                      {s.agentName ?? <span className="dim">—</span>}
+                      {s.handoverState && (
+                        <div className="dim mono" style={{ fontSize: 11 }}>{s.handoverState}</div>
+                      )}
+                    </td>
                     <td className="mono trunc">{s.zipchatConversationId}</td>
                     <td className="mono trunc">{s.cmChatId ?? "—"}</td>
                     <td className="dim">{fmtAgo(s.updatedAt)}</td>

@@ -336,3 +336,90 @@ function isAfter(iso: string | undefined, sinceIso: string): boolean {
 function truncate(s: string, n = 80): string {
   return s.length > n ? `${s.slice(0, n)}…` : s;
 }
+
+/* --------------------------------------------------- Handover-notificaties */
+
+/**
+ * De Conversational Router roept het Hand Over Endpoint aan zodra een gesprek
+ * van of naar een medewerker wordt geduwd. De payloadvorm staat niet in de
+ * documentatie, dus lezen we 'm tolerant uit: we loggen altijd het geheel en
+ * pikken eruit wat we herkennen.
+ */
+export async function handleHandover(raw: unknown): Promise<{
+  ok: boolean;
+  message: string;
+  sessionId?: number;
+  state?: string;
+}> {
+  const p = (raw ?? {}) as Record<string, any>;
+  const chatId: string | undefined = p.chat?.id ?? p.chatId ?? p.ChatId;
+  const clientId: string | undefined = p.chat?.conversationClientId ?? p.conversationClientId;
+  const state: string = String(
+    p.state ?? p.newState ?? p.NewStateNameId ?? p.eventType ?? p.$type ?? p.type ?? "onbekend",
+  );
+  const agentName: string | null =
+    p.agent?.name ?? p.agentName ?? p.AgentName ?? p.assignee?.name ?? p.user?.name ?? null;
+
+  let session: Session | null = null;
+  if (chatId) session = await store.getSessionByCmChatId(chatId);
+  if (!session && clientId?.startsWith("zipchat:")) {
+    session = await store.getSessionByZipchatConversation(clientId.slice("zipchat:".length));
+  }
+
+  if (!session) {
+    await store.logEvent({
+      direction: "cm->bridge",
+      kind: "handover.no_session",
+      ok: false,
+      summary: `Handover "${state}" voor onbekende chat ${chatId ?? "(geen id)"}`,
+      payload: raw,
+    });
+    return { ok: false, message: "Onbekende chat — geen gekoppelde Zipchat-sessie.", state };
+  }
+
+  const assigned = isAssigned(state);
+
+  await store.updateSession(session.id, {
+    handoverState: state,
+    ...(agentName ? { agentName } : {}),
+    ...(assigned ? { status: "active" } : {}),
+  });
+
+  await store.logEvent({
+    sessionId: session.id,
+    direction: "cm->bridge",
+    kind: `handover.${assigned ? "assigned" : "state"}`,
+    summary: assigned
+      ? `Medewerker${agentName ? ` ${agentName}` : ""} heeft het gesprek opgepakt (${state})`
+      : `Handover-status: ${state}`,
+    payload: raw,
+  });
+
+  // Bewust terughoudend: alleen melden dat er is doorverbonden als er ook
+  // echt iemand is toegewezen én dat expliciet is aangezet.
+  if (assigned && config.cm.notifyCustomerOnHandover) {
+    const who = agentName ? agentName : "een collega";
+    const res = await zipchat.sendManualReply(
+      session.zipchatConversationId,
+      `Je bent doorverbonden met ${who}. Je kunt hier gewoon verder typen.`,
+      { chatId: session.zipchatChatId },
+    );
+    await store.logEvent({
+      sessionId: session.id,
+      direction: "bridge->zipchat",
+      kind: "handover.customer_notified",
+      ok: res.ok,
+      statusCode: res.status,
+      summary: res.ok ? `Klant gemeld dat ${who} overneemt` : `Melden mislukt: ${res.error}`,
+    });
+  }
+
+  return { ok: true, sessionId: session.id, state, message: `Handover verwerkt: ${state}` };
+}
+
+/** Herkent de states waarin er daadwerkelijk iemand zit. */
+function isAssigned(state: string): boolean {
+  const s = state.toLowerCase();
+  if (/(noagent|unavailable|failed|timeout|queue|wachtrij|ended|closed)/.test(s)) return false;
+  return /(assigned|accepted|answered|pickedup|agent|handover)/.test(s);
+}

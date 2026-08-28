@@ -44,6 +44,13 @@ export const config = {
     botStateNameId: opt("CM_BOT_STATE_NAME_ID"),
     /** Verifieert inkomende CM-webhooks (header X-Bridge-Token). */
     webhookSecret: opt("CM_WEBHOOK_SECRET"),
+    /**
+     * Alleen als dit expliciet aan staat melden we de klant dat er is
+     * doorverbonden — en dan nog uitsluitend bij een bevestigde toewijzing.
+     * Standaard uit: een voorbarige "je bent verbonden" bij een handover die
+     * niemand oppakt is erger dan geen melding.
+     */
+    notifyCustomerOnHandover: opt("CM_HANDOVER_NOTIFY_CUSTOMER") === "true",
   },
 
   poll: {

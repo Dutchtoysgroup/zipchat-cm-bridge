@@ -14,6 +14,10 @@ export const sessions = pgTable(
     channel: text("channel").notNull().default("webchat"),
     status: text("status").notNull().default("escalating"),
     reason: text("reason"),
+    /** Laatst gemelde handover-status uit de router (bijv. agentAssigned). */
+    handoverState: text("handover_state"),
+    /** Naam van de medewerker die het gesprek oppakte, als CM die meestuurt. */
+    agentName: text("agent_name"),
     /** Watermerk: laatste bericht dat we al naar CM hebben doorgezet. */
     lastForwardedAt: timestamp("last_forwarded_at", { withTimezone: true }),
     lastAgentReplyAt: timestamp("last_agent_reply_at", { withTimezone: true }),

@@ -62,8 +62,8 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   // Live chat kan alleen als er iemand klaarstaat én we een gesprek hebben om
   // antwoorden in terug te leggen. Ontbreekt één van beide, dan is het e-mail —
   // en dat moet ook zo in de administratie staan, niet alleen in de belofte.
-  const liveChat = setting === "livechat" && hasConversation;
-  const mode: HandoverMode = liveChat ? "livechat" : "email";
+  let liveChat = setting === "livechat" && hasConversation;
+  let mode: HandoverMode = "email";
 
   // Zonder gespreks-id kunnen we geen transcript ophalen en geen antwoorden
   // terugbezorgen, maar het ticket moet er wél komen.
@@ -93,23 +93,29 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   const conv = hasConversation
     ? await zipchat.getConversation(conversationId, { chatId })
     : { ok: true as const, status: 0, data: null, error: undefined };
+  // Het transcript is meegenomen, niet noodzakelijk. Lukt het niet, dan gaat de
+  // escalatie gewoon door met naam, e-mail en de samenvatting van de assistent:
+  // een klant zonder hulp laten zitten is erger dan een ticket zonder historie.
   if (!conv.ok) {
     await store.logEvent({
       direction: "zipchat->bridge",
       kind: "escalate.transcript_failed",
       ok: false,
       statusCode: conv.status,
-      summary: conv.error,
+      summary: `${conv.error} — escalatie gaat door zonder gespreksgeschiedenis`,
       payload: { conversationId },
     });
-    return { ok: false, message: `Transcript ophalen mislukt: ${conv.error}` };
   }
 
+  const transcriptOk = conv.ok;
+  if (!transcriptOk) liveChat = false; // zonder werkend gesprek geen live chat
   const messages = conv.data?.messages ?? [];
   const name = input.name ?? conv.data?.lead?.name ?? null;
   const email = input.email ?? conv.data?.lead?.email ?? null;
 
   // 2. Sessie vastleggen.
+  mode = liveChat ? "livechat" : "email";
+
   const clientId = `zipchat:${conversationId}`;
   const cmChat = cm.buildChat({ conversationClientId: clientId, clientName: name, channel: mapChannel(channel) });
 
@@ -168,7 +174,11 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     email ? `E-mail: ${email}` : null,
     input.reason ? `Reden: ${input.reason}` : null,
     input.summary ? `Samenvatting door de assistent: ${input.summary}` : null,
-    hasConversation ? null : "LET OP: geen gespreks-id — antwoorden komen sowieso niet terug in de chat.",
+    hasConversation && !transcriptOk
+      ? "LET OP: gespreksgeschiedenis kon niet opgehaald worden bij Zipchat."
+      : hasConversation
+        ? null
+        : "LET OP: geen gespreks-id — antwoorden komen sowieso niet terug in de chat.",
     "",
     hasConversation ? "--- Gespreksgeschiedenis ---" : null,
   ]

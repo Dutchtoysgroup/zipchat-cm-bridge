@@ -340,10 +340,16 @@ function truncate(s: string, n = 80): string {
 /* --------------------------------------------------- Handover-notificaties */
 
 /**
- * De Conversational Router roept het Hand Over Endpoint aan zodra een gesprek
- * van of naar een medewerker wordt geduwd. De payloadvorm staat niet in de
- * documentatie, dus lezen we 'm tolerant uit: we loggen altijd het geheel en
- * pikken eruit wat we herkennen.
+ * Het Hand Over Endpoint uit de TwoWay-adapterconfiguratie. CM stuurt daar een
+ * platte body naartoe, standaard opgebouwd uit deze placeholders:
+ *
+ *   {"chatId":"{{$chatId}}","sessionId":"{{$sessionId}}","accountId":"{{$accountId}}",
+ *    "channel":"{{$channel}}","conversationHostId":"{{$conversationHostId}}",
+ *    "conversationClientId":"{{$conversationClientId}}","context":{{$context}}}
+ *
+ * Er zit geen expliciet event-type in. Wat er precies gebeurde moet dus uit
+ * `context` komen — en die vullen wij zelf bij de state change. We loggen de
+ * volledige payload zodat de eerste echte handover laat zien wat CM meestuurt.
  */
 export async function handleHandover(raw: unknown): Promise<{
   ok: boolean;
@@ -352,13 +358,20 @@ export async function handleHandover(raw: unknown): Promise<{
   state?: string;
 }> {
   const p = (raw ?? {}) as Record<string, any>;
-  const chatId: string | undefined = p.chat?.id ?? p.chatId ?? p.ChatId;
-  const clientId: string | undefined = p.chat?.conversationClientId ?? p.conversationClientId;
-  const state: string = String(
-    p.state ?? p.newState ?? p.NewStateNameId ?? p.eventType ?? p.$type ?? p.type ?? "onbekend",
+  const ctx = (p.context ?? {}) as Record<string, any>;
+
+  const chatId: string | undefined = p.chatId ?? p.chat?.id ?? p.ChatId;
+  const clientId: string | undefined = p.conversationClientId ?? p.chat?.conversationClientId;
+  const cmSessionId: string | undefined = p.sessionId ?? p.chat?.sessionId;
+
+  // Volgorde: expliciet veld in de payload, anders iets uit context, anders
+  // gewoon "handover" — het endpoint heet niet voor niets zo.
+  const state = String(
+    p.eventType ?? p.state ?? p.newState ?? p.NewStateNameId ??
+      ctx.state ?? ctx.eventType ?? ctx.reason ?? "handover",
   );
   const agentName: string | null =
-    p.agent?.name ?? p.agentName ?? p.AgentName ?? p.assignee?.name ?? p.user?.name ?? null;
+    p.agent?.name ?? p.agentName ?? ctx.agentName ?? ctx.agent ?? ctx.userName ?? null;
 
   let session: Session | null = null;
   if (chatId) session = await store.getSessionByCmChatId(chatId);
@@ -382,6 +395,7 @@ export async function handleHandover(raw: unknown): Promise<{
   await store.updateSession(session.id, {
     handoverState: state,
     ...(agentName ? { agentName } : {}),
+    ...(cmSessionId ? { cmSessionId } : {}),
     ...(assigned ? { status: "active" } : {}),
   });
 
@@ -417,9 +431,51 @@ export async function handleHandover(raw: unknown): Promise<{
   return { ok: true, sessionId: session.id, state, message: `Handover verwerkt: ${state}` };
 }
 
+/* ------------------------------------------------------- Router-events */
+
+/**
+ * Het Event Endpoint. Hier komen router-events binnen, waaronder
+ * RouterSessionEnded. We loggen alles en sluiten de sessie als de router
+ * 'm beëindigt, zodat de poller er niet eindeloos op blijft draaien.
+ */
+export async function handleRouterEvent(raw: unknown): Promise<{ ok: boolean; message: string; sessionId?: number }> {
+  const p = (raw ?? {}) as Record<string, any>;
+  const chatId: string | undefined = p.chatId ?? p.chat?.id;
+  const clientId: string | undefined = p.conversationClientId ?? p.chat?.conversationClientId;
+  const type = String(
+    p.eventType ?? p.$type ?? p.type ?? p.conversationEvents?.[0]?.$type ?? "onbekend",
+  );
+
+  let session: Session | null = null;
+  if (chatId) session = await store.getSessionByCmChatId(chatId);
+  if (!session && clientId?.startsWith("zipchat:")) {
+    session = await store.getSessionByZipchatConversation(clientId.slice("zipchat:".length));
+  }
+
+  const ended = /sessionended|ended|closed|clientleft/i.test(type);
+
+  await store.logEvent({
+    sessionId: session?.id ?? null,
+    direction: "cm->bridge",
+    kind: `event.${ended ? "session_ended" : "received"}`,
+    summary: session ? `Router-event: ${type}` : `Router-event ${type} zonder gekoppelde sessie`,
+    payload: raw,
+  });
+
+  if (session && ended) {
+    await closeSession(session.id, true);
+    return { ok: true, sessionId: session.id, message: `Sessie gesloten na ${type}.` };
+  }
+
+  return { ok: true, sessionId: session?.id, message: `Event ${type} gelogd.` };
+}
+
+/** Herkent de states waarin er daadwerkelijk iemand zit. */
 /** Herkent de states waarin er daadwerkelijk iemand zit. */
 function isAssigned(state: string): boolean {
   const s = state.toLowerCase();
-  if (/(noagent|unavailable|failed|timeout|queue|wachtrij|ended|closed)/.test(s)) return false;
+  // Eerst de gevallen waarin er juist NIEMAND zit — die winnen altijd.
+  if (/(noagent|unavailable|failed|timeout|queue|wachtrij|ended|closed|rejected)/.test(s)) return false;
   return /(assigned|accepted|answered|pickedup|agent|handover)/.test(s);
 }
+

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { handleAgentReply } from "@/lib/bridge";
 import { checkCmWebhookSecret } from "@/lib/auth";
+import { readTolerantJson } from "@/lib/readBody";
 import { store } from "@/db";
 import type { TwoWayPayload } from "@/lib/cm";
 
@@ -11,12 +12,9 @@ export async function POST(req: Request) {
   const auth = checkCmWebhookSecret(req);
   if (!auth.ok) return NextResponse.json({ ok: false, error: "Niet geautoriseerd" }, { status: 401 });
 
-  let payload: TwoWayPayload;
-  try {
-    payload = (await req.json()) as TwoWayPayload;
-  } catch {
-    return NextResponse.json({ ok: false, error: "Ongeldige JSON" }, { status: 400 });
-  }
+  const body = await readTolerantJson(req, "webhook");
+  if (!body.ok) return NextResponse.json({ ok: true, message: "Body niet leesbaar, ruw gelogd." });
+  const payload = body.data as TwoWayPayload;
 
   await store.logEvent({
     direction: "cm->bridge",

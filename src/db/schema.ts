@@ -9,6 +9,8 @@ export const sessions = pgTable(
     zipchatConversationId: text("zipchat_conversation_id").notNull().unique(),
     cmChatId: text("cm_chat_id"),
     cmConversationClientId: text("cm_conversation_client_id"),
+    /** sessionId dat de router in zijn callbacks meestuurt. */
+    cmSessionId: text("cm_session_id"),
     customerName: text("customer_name"),
     customerEmail: text("customer_email"),
     channel: text("channel").notNull().default("webchat"),

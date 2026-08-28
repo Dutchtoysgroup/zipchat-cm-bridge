@@ -121,6 +121,7 @@ class MemoryStore implements Store {
       id: this.seqS++,
       cmChatId: null,
       cmConversationClientId: null,
+      cmSessionId: null,
       customerName: null,
       customerEmail: null,
       channel: "webchat",

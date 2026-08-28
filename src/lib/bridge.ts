@@ -85,7 +85,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
       message:
         existing.mode === "livechat"
           ? "Dit gesprek staat al bij een medewerker; zeg dat een collega het al heeft opgepakt."
-          : "De vraag is al doorgegeven; zeg dat een collega zo snel mogelijk per e-mail reageert en dat het niet nog een keer hoeft.",
+          : `De vraag is al doorgegeven, dat hoeft niet nog een keer. ${offlineMessage(existing.customerEmail)}`,
     };
   }
 
@@ -271,7 +271,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     mocked: sent.mocked,
     message: liveChat
       ? "Doorgezet. Zeg tegen de klant dat een collega het gesprek nu overneemt en dat die hier in de chat antwoordt."
-      : `Doorgezet. Zeg tegen de klant dat de vraag is doorgegeven aan de klantenservice, dat er op dit moment niemand live meekijkt in de chat, en dat een collega zo snel mogelijk per e-mail${email ? ` (${email})` : ""} reageert.`,
+      : offlineMessage(email),
   };
 }
 
@@ -455,6 +455,27 @@ export async function closeSession(sessionId: number, backToAi = true) {
 }
 
 /* ------------------------------------------------------------------ Utils */
+
+/**
+ * Wat de assistent tegen de klant zegt als er niemand live meekijkt.
+ * De WhatsApp-link moet er letterlijk in — een bot die een URL "netjes"
+ * herschrijft levert een link op die niet werkt.
+ */
+function offlineMessage(email?: string | null): string {
+  const parts = [
+    "Doorgezet. Vertel de klant het volgende, in de merkstem en in de taal van het gesprek:",
+    "- de vraag is doorgegeven aan de klantenservice",
+    `- er kijkt op dit moment niemand live mee in de chat, maar normaal krijgt hij binnen ${config.followUp.responseTime} antwoord`,
+  ];
+  if (email) parts.push(`- het antwoord komt per e-mail op ${email}`);
+  if (config.followUp.whatsappUrl) {
+    parts.push(
+      `- wil hij sneller contact, dan kan hij ons een appje sturen via ${config.followUp.whatsappUrl}`,
+      `Neem die link exact zo over: ${config.followUp.whatsappUrl}. Kort hem niet in en verander er niets aan.`,
+    );
+  }
+  return parts.join("\n");
+}
 
 /**
  * CM accepteert alleen kanalen uit een vaste lijst — "Email" en "Custom" zitten

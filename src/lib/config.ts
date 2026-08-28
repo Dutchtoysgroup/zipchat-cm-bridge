@@ -78,6 +78,14 @@ export const config = {
     idleTimeoutMin: Number(opt("POLL_IDLE_TIMEOUT_MIN") ?? 60),
   },
 
+  /** Wat we de klant beloven als er niemand live meekijkt. */
+  followUp: {
+    /** Verwachte reactietijd, in de tekst van de bot. */
+    responseTime: opt("RESPONSE_TIME_TEXT") ?? "24 uur",
+    /** Directe WhatsApp-link; leeg laten om het niet te noemen. */
+    whatsappUrl: opt("WHATSAPP_URL"),
+  },
+
   /** Notificatie per e-mail, los van de CM-routing. */
   mail: {
     /** Waar de escalaties heen gaan. */

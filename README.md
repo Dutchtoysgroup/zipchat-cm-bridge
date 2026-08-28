@@ -104,8 +104,7 @@ Maak in de Conversational Router een **TwoWay-adapter** aan en vul het formulier
 | Hand Over Endpoint › Url | `https://<jouw-deploy>/api/cm/handover` |
 | Hand Over Endpoint › Body | de standaardwaarde laten staan |
 | Hand Over Endpoint › Add header | dezelfde `X-Bridge-Token` |
-| Event Endpoint › Url | `https://<jouw-deploy>/api/cm/event` |
-| Event Endpoint › Add header | dezelfde `X-Bridge-Token` |
+| Event Endpoint › Url | `https://<jouw-deploy>/api/cm/event?token=<CM_WEBHOOK_SECRET>` |
 
 Na opslaan krijg je de adapter-URL in de vorm
 `https://api.conversational.cm.com/conversational/twoway/v2/accounts/{technicalLinkId}/adapters/{adapterId}`.
@@ -116,6 +115,16 @@ Verder nodig:
 - een routingregel die naar **Agent Inbox** gaat; het `stateNameId` daarvan
   invullen als `CM_AGENT_STATE_NAME_ID`;
 - een **product token** met recht `ConversationalRouter.RouterSession_Update`.
+
+### Waarom het Event Endpoint zijn geheim in de URL heeft
+
+Het Message- en Hand Over Endpoint hebben in CM een *Headers*-sectie; het Event
+Endpoint niet. Daar is de URL de enige plek waar een geheim kwijt kan, dus
+accepteert de bridge op alle CM-endpoints ook een `?token=`-parameter. De
+header blijft de voorkeur en wordt als eerste gecontroleerd.
+
+Het geheim komt zo wel in de request-logs van Vercel terecht. Dat is hier
+aanvaardbaar: wie die logs kan lezen, kan ook de environment variables lezen.
 
 ### Over de body van het Hand Over Endpoint
 

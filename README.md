@@ -1,5 +1,8 @@
 # Zipchat ↔ CM Mobile Service Cloud bridge
 
+**Repo:** https://github.com/Dutchtoysgroup/zipchat-cm-bridge (privé) — elke push
+naar `main` deployt automatisch naar productie.
+
 **Live:** https://zipchat-cm-bridge.vercel.app — het dashboard zit achter Basic
 auth (gebruiker `exit`; wachtwoord staat in `.secrets-generated.txt`, en in
 Vercel als `DASHBOARD_PASSWORD`).
@@ -35,7 +38,8 @@ Klant ──▶ Zipchat-widget ──▶ AI kan het niet aan
 
 Klantberichten tijdens een handover worden **gepolld** (`/api/poll`), omdat
 Zipchat geen webhook aanbiedt. De cron draait elke minuut en loopt binnen die
-minuut door met een interval van 5 seconden.
+minuut door met een interval van 5 seconden, zodat de latency ~5s is in plaats
+van 60s. Draait er geen enkel gesprek, dan stopt de invocatie meteen.
 
 ## Aan de praat krijgen
 

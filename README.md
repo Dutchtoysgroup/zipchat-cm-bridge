@@ -65,6 +65,7 @@ dus een Neon-database aanmaken en `npm run db:push` draaien.
 | `POST /api/zipchat/escalate` | de Zipchat custom tool | escalatie starten |
 | `POST /api/cm/webhook` | de Conversational Router | agent-antwoord bezorgen |
 | `POST /api/cm/handover` | de Conversational Router | handover-status bijwerken |
+| `POST /api/cm/event` | de Conversational Router | router-events, sluit de sessie bij RouterSessionEnded |
 | `GET /api/poll` | Vercel Cron | klantberichten doorsturen |
 | `GET /api/health` | dashboard | configuratie- en statuscheck |
 | `GET /api/sessions` · `GET /api/events` | dashboard | data |
@@ -101,7 +102,10 @@ Maak in de Conversational Router een **TwoWay-adapter** aan en vul het formulier
 | Message Endpoint › Method | `POST` |
 | Message Endpoint › Add header | naam `X-Bridge-Token`, waarde = je `CM_WEBHOOK_SECRET` |
 | Hand Over Endpoint › Url | `https://<jouw-deploy>/api/cm/handover` |
+| Hand Over Endpoint › Body | de standaardwaarde laten staan |
 | Hand Over Endpoint › Add header | dezelfde `X-Bridge-Token` |
+| Event Endpoint › Url | `https://<jouw-deploy>/api/cm/event` |
+| Event Endpoint › Add header | dezelfde `X-Bridge-Token` |
 
 Na opslaan krijg je de adapter-URL in de vorm
 `https://api.conversational.cm.com/conversational/twoway/v2/accounts/{technicalLinkId}/adapters/{adapterId}`.
@@ -112,6 +116,28 @@ Verder nodig:
 - een routingregel die naar **Agent Inbox** gaat; het `stateNameId` daarvan
   invullen als `CM_AGENT_STATE_NAME_ID`;
 - een **product token** met recht `ConversationalRouter.RouterSession_Update`.
+
+### Over de body van het Hand Over Endpoint
+
+CM vult die body met placeholders:
+
+```json
+{"chatId":"{{$chatId}}","sessionId":"{{$sessionId}}","accountId":"{{$accountId}}",
+ "channel":"{{$channel}}","conversationHostId":"{{$conversationHostId}}",
+ "conversationClientId":"{{$conversationClientId}}","context":{{$context}}}
+```
+
+Let op: daar zit **geen event-type in**. De bridge kan dus niet uit de body zelf
+afleiden of er een medewerker is toegewezen of dat de handover juist mislukte;
+hij kijkt in `context` en valt anders terug op de neutrale status `handover`.
+
+De volledige payload gaat het logboek in. Bekijk bij de eerste echte handover
+wat er in `context` zit — staat daar iets bruikbaars in, dan scherpen we de
+herkenning in `isAssigned()` daarop aan.
+
+Een lege placeholder levert ongeldige JSON op (`"context":}`). De bridge
+repareert dat en logt anders de ruwe body, in plaats van een 400 terug te geven
+waar je niets aan hebt.
 
 ### Over het Hand Over Endpoint
 

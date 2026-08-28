@@ -29,6 +29,8 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     mockMode: config.mockMode,
+    mockZipchat: config.mockZipchat,
+    mockCm: config.mockCm,
     storage: store.kind,
     openSessions: open.length,
     missing,

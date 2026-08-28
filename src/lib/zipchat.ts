@@ -42,7 +42,7 @@ export async function getConversation(
   conversationId: string,
   opts: { chatId?: string; sinceIso?: string } = {},
 ): Promise<ApiResult<ZipchatConversation>> {
-  if (config.mockMode) {
+  if (config.mockZipchat) {
     return mock<ZipchatConversation>({
       id: conversationId,
       lead: { name: "Testklant", email: "test@example.com" },
@@ -71,7 +71,7 @@ export async function setAssignment(
   assigneeId: number | null,
   chatId?: string,
 ): Promise<ApiResult<unknown>> {
-  if (config.mockMode) return mock({ assignee_id: assigneeId });
+  if (config.mockZipchat) return mock({ assignee_id: assigneeId });
   return requestJson(`${chatBase(chatId)}/conversations/${conversationId}/assignment`, {
     method: "PATCH",
     headers: headers(),
@@ -85,7 +85,7 @@ export async function sendManualReply(
   message: string,
   opts: { chatId?: string; senderId?: number } = {},
 ): Promise<ApiResult<unknown>> {
-  if (config.mockMode) return mock({ message, delivered: true });
+  if (config.mockZipchat) return mock({ message, delivered: true });
   const senderId = opts.senderId ?? Number(config.zipchat.senderId);
   const body: Record<string, unknown> = { message };
   if (Number.isFinite(senderId)) body.sender_id = senderId;
@@ -102,7 +102,7 @@ export async function setEscalation(
   resolved: boolean,
   chatId?: string,
 ): Promise<ApiResult<unknown>> {
-  if (config.mockMode) return mock({ resolved });
+  if (config.mockZipchat) return mock({ resolved });
   return requestJson(`${chatBase(chatId)}/conversations/${conversationId}/escalation`, {
     method: "PATCH",
     headers: headers(),
@@ -112,7 +112,7 @@ export async function setEscalation(
 
 /** Verbindingstest voor het dashboard. */
 export async function ping(): Promise<ApiResult<unknown>> {
-  if (config.mockMode) return mock({ note: "mock-modus: geen echte Zipchat-call" });
+  if (config.mockZipchat) return mock({ note: "mock-modus: geen echte Zipchat-call" });
   return requestJson(`${config.zipchat.baseUrl}/chats`, { method: "GET", headers: headers() });
 }
 

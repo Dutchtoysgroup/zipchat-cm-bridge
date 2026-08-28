@@ -9,11 +9,27 @@ function opt(name: string): string | undefined {
 }
 
 export const config = {
-  /** Zonder echte credentials draait de bridge in mock-modus: geen externe calls. */
+  /**
+   * Mock per systeem, niet globaal: zodra één kant credentials heeft kun je
+   * die helft al echt testen terwijl de andere nog simuleert.
+   */
+  get mockZipchat(): boolean {
+    const f = opt("BRIDGE_MOCK_MODE");
+    if (f === "true") return true;
+    if (f === "false") return false;
+    return !this.zipchat.token;
+  },
+
+  get mockCm(): boolean {
+    const f = opt("BRIDGE_MOCK_MODE");
+    if (f === "true") return true;
+    if (f === "false") return false;
+    return !this.cm.productToken;
+  },
+
+  /** Draait er nog iets in mock? Alleen voor de weergave in het dashboard. */
   get mockMode(): boolean {
-    if (opt("BRIDGE_MOCK_MODE") === "true") return true;
-    if (opt("BRIDGE_MOCK_MODE") === "false") return false;
-    return !this.zipchat.token || !this.cm.productToken;
+    return this.mockZipchat || this.mockCm;
   },
 
   /** Beschermt /api/zipchat/escalate en /api/poll tegen willekeurige aanroepen. */

@@ -74,7 +74,7 @@ function mock<T>(data: T): ApiResult<T> {
 
 /** Stuur berichten naar de Conversational Router (en daarmee richting MSC). */
 export async function sendToRouter(payload: TwoWayPayload): Promise<ApiResult<unknown>> {
-  if (config.mockMode) return mock({ note: "mock-modus: niet echt naar CM verstuurd", payload });
+  if (config.mockCm) return mock({ note: "mock-modus: niet echt naar CM verstuurd", payload });
   return requestJson(twowayUrl(), {
     method: "POST",
     headers: {
@@ -97,7 +97,7 @@ export async function setSessionState(
   newStateNameId: string,
   context: Record<string, string> = {},
 ): Promise<ApiResult<unknown>> {
-  if (config.mockMode) return mock({ cmChatId, newStateNameId, context });
+  if (config.mockCm) return mock({ cmChatId, newStateNameId, context });
   const url = `${config.cm.routerControlBaseUrl}/accounts/${config.cm.logicalAccountId}/chats/${cmChatId}/session/state`;
   return requestJson(url, {
     method: "PUT",
@@ -111,14 +111,14 @@ export async function setSessionState(
 
 /** Huidige routerstatus opvragen. */
 export async function getSession(cmChatId: string): Promise<ApiResult<unknown>> {
-  if (config.mockMode) return mock({ cmChatId, state: "mock-agent-state" });
+  if (config.mockCm) return mock({ cmChatId, state: "mock-agent-state" });
   const url = `${config.cm.routerControlBaseUrl}/accounts/${config.cm.logicalAccountId}/chats/${cmChatId}/session`;
   return requestJson(url, { method: "GET", headers: { "X-CM-PRODUCTTOKEN": config.cm.productToken ?? "" } });
 }
 
 /** Routersessie beëindigen (reset routing). */
 export async function endSession(cmChatId: string): Promise<ApiResult<unknown>> {
-  if (config.mockMode) return mock({ cmChatId, ended: true });
+  if (config.mockCm) return mock({ cmChatId, ended: true });
   const url = `${config.cm.routerControlBaseUrl}/accounts/${config.cm.logicalAccountId}/chats/${cmChatId}/session/end`;
   return requestJson(url, { method: "PUT", headers: { "X-CM-PRODUCTTOKEN": config.cm.productToken ?? "" } });
 }
@@ -136,7 +136,7 @@ export function extractInboundTexts(payload: TwoWayPayload): string[] {
 
 /** Verbindingstest voor het dashboard. */
 export async function ping(): Promise<ApiResult<unknown>> {
-  if (config.mockMode) return mock({ note: "mock-modus: geen echte CM-call" });
+  if (config.mockCm) return mock({ note: "mock-modus: geen echte CM-call" });
   // Een lege payload naar de adapter is geen nette test; we controleren de
   // routing-control API met een niet-bestaande chat: 401/403 = token fout,
   // 404 = token werkt maar chat bestaat niet (dat is wat we willen zien).

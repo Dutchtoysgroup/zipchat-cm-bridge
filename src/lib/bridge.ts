@@ -59,6 +59,17 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   const channel: Channel = input.channel ?? "webchat";
   const hasConversation = !!input.conversationId;
   const setting = await getMode();
+
+  // Alleen als er echt iemand klaarzit hebben we naam en e-mail nodig; anders
+  // is dat pure wrijving voor een klant die toch naar WhatsApp wordt verwezen.
+  if (setting === "livechat" && (!input.name || !input.email)) {
+    await store.logEvent({
+      direction: "zipchat->bridge",
+      kind: "escalate.details_needed",
+      summary: "Live chat actief maar naam of e-mail ontbrak — om gegevens gevraagd",
+    });
+    return { ok: true, mode: "livechat", message: needDetailsMessage() };
+  }
   // Live chat kan alleen als er iemand klaarstaat én we een gesprek hebben om
   // antwoorden in terug te leggen. Ontbreekt één van beide, dan is het e-mail —
   // en dat moet ook zo in de administratie staan, niet alleen in de belofte.
@@ -85,7 +96,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
       message:
         existing.mode === "livechat"
           ? "Dit gesprek staat al bij een medewerker; zeg dat een collega het al heeft opgepakt."
-          : `De vraag is al doorgegeven, dat hoeft niet nog een keer. ${offlineMessage(existing.customerEmail)}`,
+          : offlineMessage(),
     };
   }
 
@@ -281,7 +292,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     mocked: sent.mocked,
     message: liveChat
       ? "Doorgezet. Zeg tegen de klant dat een collega het gesprek nu overneemt en dat die hier in de chat antwoordt."
-      : offlineMessage(email),
+      : offlineMessage(),
   };
 }
 
@@ -468,30 +479,44 @@ export async function closeSession(sessionId: number, backToAi = true) {
 
 /**
  * Wat de assistent tegen de klant zegt als er niemand live meekijkt.
- * De WhatsApp-link moet er letterlijk in — een bot die een URL "netjes"
- * herschrijft levert een link op die niet werkt.
+ * De tekst staat hier voluit — de bot moet 'm overnemen, niet zelf iets
+ * verzinnen. De link moet letterlijk blijven staan: een bot die een URL
+ * "netjes" herschrijft levert een link op die niet werkt.
  */
-function offlineMessage(email?: string | null): string {
-  const parts = [
-    "Doorgezet. Vertel de klant het volgende, in de merkstem en in de taal van het gesprek:",
-    "- de vraag is doorgegeven aan de klantenservice",
-    `- er kijkt op dit moment niemand live mee in de chat, maar normaal krijgt hij binnen ${config.followUp.responseTime} antwoord`,
-  ];
-  if (email) parts.push(`- het antwoord komt per e-mail op ${email}`);
-  if (config.followUp.whatsappUrl) {
-    parts.push(
-      `- wil hij sneller contact, dan kan hij ons een appje sturen via ${config.followUp.whatsappUrl}`,
-      `Neem die link exact zo over: ${config.followUp.whatsappUrl}. Kort hem niet in en verander er niets aan.`,
-    );
-  }
-  return parts.join("\n");
+function offlineMessage(): string {
+  const wa = config.followUp.whatsappUrl;
+  const tijd = config.followUp.responseTime;
+
+  const frans = [
+    "Malheureusement, aucun conseiller n'est disponible en direct pour le moment.",
+    wa
+      ? `Le moyen le plus rapide de nous contacter est d'envoyer un message sur notre WhatsApp : ${wa}.`
+      : "",
+    `Vous y recevez normalement une réponse sous ${tijd === "24 uur" ? "24 heures" : tijd}.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return [
+    "Geef de klant dit antwoord. Neem het over zoals het er staat:",
+    "",
+    frans,
+    "",
+    "Is het gesprek niet in het Frans, vertaal het dan getrouw naar de taal van de klant" +
+      (wa ? ` en laat de link ${wa} exact ongewijzigd.` : "."),
+    "Beloof niets anders: geen terugbelverzoek, geen e-mail, geen medewerker in de chat.",
+  ].join("\n");
 }
 
-/**
- * CM accepteert alleen kanalen uit een vaste lijst — "Email" en "Custom" zitten
- * daar niet in. Alles wat via deze bridge binnenkomt is voor de router
- * webverkeer; het echte kanaal staat in de begeleidende tekst.
- */
+/** Wat de bot moet doen als er wél iemand klaarzit maar gegevens ontbreken. */
+function needDetailsMessage(): string {
+  return [
+    "Er zit nu wel een collega klaar, maar ik heb nog gegevens nodig.",
+    "Vraag de klant om zijn naam en e-mailadres, en roep deze tool daarna opnieuw aan met die gegevens erbij.",
+    "Zeg nog niet dat het gesprek is doorgezet.",
+  ].join("\n");
+}
+
 function mapChannel(c: Channel): string {
   const map: Record<Channel, string> = {
     webchat: config.cm.channel,

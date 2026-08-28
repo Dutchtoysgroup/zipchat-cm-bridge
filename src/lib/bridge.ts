@@ -101,13 +101,16 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
 
   // Alleen als er echt iemand klaarzit hebben we naam en e-mail nodig; anders
   // is dat pure wrijving voor een klant die toch naar WhatsApp wordt verwezen.
-  if (setting === "livechat" && (!input.name || !input.email)) {
-    await store.logEvent({
-      direction: "zipchat->bridge",
-      kind: "escalate.details_needed",
-      summary: "Live chat actief maar naam of e-mail ontbrak — om gegevens gevraagd",
-    });
-    return { ok: true, mode: "livechat", message: needDetailsMessage() };
+  if (setting === "livechat") {
+    const bezwaar = valideerKlantgegevens(input.name, input.email);
+    if (bezwaar) {
+      await store.logEvent({
+        direction: "zipchat->bridge",
+        kind: "escalate.details_needed",
+        summary: `Live chat actief maar klantgegevens niet bruikbaar: ${input.name ?? "(geen naam)"} / ${input.email ?? "(geen e-mail)"}`,
+      });
+      return { ok: true, mode: "livechat", message: `${needDetailsMessage()}\n\n${bezwaar}` };
+    }
   }
   // Live chat kan alleen als er iemand klaarstaat én we een gesprek hebben om
   // antwoorden in terug te leggen. Ontbreekt één van beide, dan is het e-mail —
@@ -536,6 +539,56 @@ export async function closeSession(sessionId: number, backToAi = true) {
 }
 
 /* ------------------------------------------------------------------ Utils */
+
+/**
+ * Overgenomen uit HALO (tool 21). Een bot die een ontbrekende naam invult met
+ * "Unbekannt" of "onbekend" levert een ticket op dat bij de klantenservice niet
+ * meer van een echte naam te onderscheiden is. Beter blokkeren en opnieuw vragen.
+ */
+const PLACEHOLDERS = new Set([
+  "", "-", "--", ".", "..", "x", "xx", "xxx", "?", "??", "???",
+  "unknown", "unbekannt", "unbekannte", "unbekannter", "onbekend", "inconnu",
+  "desconocido", "n/a", "na", "n.v.t", "nvt", "keine angabe", "ohne angabe",
+  "not provided", "niet opgegeven", "nicht angegeben", "nicht bekannt",
+  "none", "null", "nil", "nan", "geen", "geen naam", "geen email", "geen e-mail",
+  "kein name", "keine email", "no name", "no email",
+  "naam", "name", "vorname", "nachname", "voornaam", "achternaam",
+  "firstname", "lastname", "email", "e-mail", "emailadres", "email adres",
+  "email address", "e-mail-adresse", "person", "klant", "kunde", "customer",
+  "user", "gebruiker", "anoniem", "anonymous", "test", "exit", "exit toys",
+]);
+
+/** De enige toegestane uitzondering: de klant weigert zijn naam te geven. */
+const NAAM_MARKER = "naam niet opgegeven";
+
+function kaal(v: string): string {
+  return v.replace(/_/g, " ").replace(/\s+/g, " ").trim().replace(/^[.,:;!*\s]+|[.,:;!*\s]+$/g, "").toLowerCase();
+}
+
+export function valideerKlantgegevens(name?: string | null, email?: string | null): string | null {
+  const n = (name ?? "").trim();
+  const e = (email ?? "").trim();
+  const nk = kaal(n);
+  const ek = kaal(e);
+
+  const naamOk =
+    nk.length >= 2 && !PLACEHOLDERS.has(nk) && !n.includes("@") && !/^\d+$/.test(nk.replace(/ /g, ""));
+  const naamMarker = nk === NAAM_MARKER;
+  const mailOk = /^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(e) && !PLACEHOLDERS.has(ek);
+
+  if ((naamOk || naamMarker) && mailOk) return null;
+
+  const mist: string[] = [];
+  if (!mailOk) mist.push("een geldig e-mailadres");
+  if (!naamOk && !naamMarker) mist.push("de naam van de klant");
+  return (
+    `Nog niet doorgezet. Ontbrekend of ongeldig: ${mist.join(" en ")}. ` +
+    "Zeg tegen de klant NIET dat hij is doorverbonden. Vraag het ontbrekende gegeven " +
+    "alsnog, in een apart bericht, en roep deze tool daarna opnieuw aan met de echte " +
+    "waarde. Vul nooit zelf iets in als 'onbekend', 'unknown' of 'geen'. Wil de klant " +
+    "zijn naam na twee keer vragen echt niet geven, gebruik dan exact 'NAAM NIET OPGEGEVEN'."
+  );
+}
 
 /**
  * Wat de assistent tegen de klant zegt als er niemand live meekijkt.

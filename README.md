@@ -184,16 +184,35 @@ curl -s "https://app.zipchat.ai/api/integrations/backend_api/v1/chats/<chat_id>/
   -H "Authorization: Bearer $ZIPCHAT_API_TOKEN"
 ```
 
-## Nog te verifiëren tegen de live API
+## Tegen de live router uitgezocht
 
-Deze punten volgen uit de documentatie maar zijn nog niet tegen een echte
-omgeving getest. Het logboek in het dashboard toont de ruwe respons, dus een
-afwijking is snel te zien en te corrigeren:
+Deze punten stonden eerst als aanname in de code. Ze zijn nu getest tegen de
+echte adapter; de code doet wat hieronder staat.
 
-- de exacte `$type`-waarde voor tekstberichten in TwoWay (nu `"Text"`);
-- de kanaalnaam die CM verwacht voor een custom webchat-kanaal (`CM_CHANNEL`);
-- of `chat.id` zelf aangeleverd mag worden, of dat CM 'm oplegt;
-- of `CM_LOGICAL_ACCOUNT_ID` gelijk is aan het technicalLinkId.
+| Aanname | Werkelijkheid |
+|---|---|
+| `$type: "Text"` | **Fout.** Moet `"text"` zijn, kleine letters. `"Text"` geeft HTTP 400: CM's deserializer kan `MessageBase` niet instantiëren. |
+| kanaal `"Custom"` | **Bestaat niet.** De router accepteert een vaste lijst; een eigen webchat is **`CXWebConversations`**. |
+| wij bepalen `chat.id` | **Nee.** Het veld moet gevuld zijn, maar CM negeert de waarde en leidt zijn eigen id af uit `conversationClientId`. Dat id staat in het 201-antwoord en is leidend voor alle callbacks — de bridge legt het vast. |
+| `LogicalAccountId` == technicalLinkId | **Onbekend.** Routing control geeft `403` met dit producttoken; zie hieronder. |
+
+Een geslaagde verzending geeft `201` met:
+
+```json
+{"chat":{"id":"55818476-…","channel":"CXWebConversations", …},
+ "message":"Message(s) accepted"}
+```
+
+### Routing control is optioneel en staat nu uit
+
+`PUT …/session/state` geeft `403 Forbidden`: het producttoken uit Channels →
+Gateway mist het recht `ConversationalRouter.RouterSession_Update`.
+
+Dat blokkeert niets. De bridge post het transcript naar de adapter en de
+routingregels van de router bepalen waar het gesprek landt. Je hebt dit recht
+alleen nodig als je de handover expliciet wilt forceren of skill-based wilt
+routeren — vraag CM-support er dan om en vul daarna
+`CM_AGENT_STATE_NAME_ID` in.
 
 ## Bekende beperking
 

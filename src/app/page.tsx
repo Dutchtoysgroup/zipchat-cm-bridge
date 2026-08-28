@@ -22,6 +22,7 @@ type Session = {
   channel: string;
   status: string;
   reason: string | null;
+  mode: string;
   handoverState: string | null;
   agentName: string | null;
   updatedAt: string;
@@ -55,6 +56,8 @@ export default function Dashboard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [mode, setMode] = useState<"livechat" | "email" | null>(null);
+  const [convId, setConvId] = useState("");
 
   const [name, setName] = useState("Testklant");
   const [email, setEmail] = useState("test@example.com");
@@ -64,14 +67,16 @@ export default function Dashboard() {
 
   const refresh = useCallback(async () => {
     try {
-      const [h, s, e] = await Promise.all([
+      const [h, s, e, m] = await Promise.all([
         fetch("/api/health").then((r) => r.json()),
         fetch("/api/sessions").then((r) => r.json()),
         fetch("/api/events?limit=150").then((r) => r.json()),
+        fetch("/api/settings").then((r) => r.json()),
       ]);
       if (h.ok) setHealth(h);
       if (s.ok) setSessions(s.sessions ?? []);
       if (e.ok) setEvents(e.events ?? []);
+      if (m.ok) setMode(m.mode);
     } catch {
       /* stil: volgende tik probeert opnieuw */
     }
@@ -97,6 +102,35 @@ export default function Dashboard() {
   useEffect(() => {
     if (selected === null && openSessions.length > 0) setSelected(openSessions[0].id);
   }, [openSessions, selected]);
+
+  async function switchMode(next: "livechat" | "email") {
+    setBusy("mode");
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: next }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setMode(data.mode);
+        setResult({
+          ok: true,
+          text:
+            next === "livechat"
+              ? "Modus: live chat. Nieuwe escalaties worden aan een medewerker in de chat beloofd."
+              : "Modus: e-mail. Nieuwe escalaties krijgen een e-mailbelofte; de AI blijft in de chat actief.",
+        });
+      } else {
+        setResult({ ok: false, text: data.error ?? "Wisselen mislukt" });
+      }
+    } catch (err) {
+      setResult({ ok: false, text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(null);
+      refresh();
+    }
+  }
 
   async function run(action: string, extra: Record<string, unknown> = {}) {
     setBusy(action);
@@ -127,6 +161,34 @@ export default function Dashboard() {
         <h1>Zipchat ↔ CM Mobile Service Cloud</h1>
         <span className="sub">Bridge via de Conversational Router</span>
       </header>
+
+      {/* ---------------- Modus ---------------- */}
+      <section className="panel">
+        <h2>Bemensing</h2>
+        <div className="row" style={{ gap: 8, alignItems: "center" }}>
+          <button
+            className={mode === "livechat" ? "primary" : undefined}
+            disabled={!!busy || mode === null}
+            onClick={() => switchMode("livechat")}
+          >
+            Live chat — er zit iemand klaar
+          </button>
+          <button
+            className={mode === "email" ? "primary" : undefined}
+            disabled={!!busy || mode === null}
+            onClick={() => switchMode("email")}
+          >
+            E-mail — niemand beschikbaar
+          </button>
+          <span className="dim" style={{ fontSize: 12 }}>
+            {mode === null
+              ? "…"
+              : mode === "livechat"
+                ? "De bot belooft de klant dat een collega het gesprek in de chat overneemt."
+                : "De bot zegt dat er per e-mail wordt gereageerd. De AI blijft actief in de chat."}
+          </span>
+        </div>
+      </section>
 
       {/* ---------------- Status ---------------- */}
       <section className="panel">
@@ -192,13 +254,21 @@ export default function Dashboard() {
             E-mail klant
             <input value={email} onChange={(e) => setEmail(e.target.value)} />
           </label>
+          <label className="field" style={{ flex: "1 1 240px" }}>
+            Zipchat-gesprek-id (optioneel)
+            <input
+              value={convId}
+              onChange={(e) => setConvId(e.target.value)}
+              placeholder="leeg = ticket zonder transcript"
+            />
+          </label>
         </div>
 
         <div className="row">
-          <button className="primary" disabled={!!busy} onClick={() => run("incoming_chat", { name, email })}>
+          <button className="primary" disabled={!!busy} onClick={() => run("incoming_chat", { name, email, conversationId: convId })}>
             {busy === "incoming_chat" ? "Bezig…" : "Inkomende chat → escaleren"}
           </button>
-          <button disabled={!!busy} onClick={() => run("incoming_email", { name, email })}>
+          <button disabled={!!busy} onClick={() => run("incoming_email", { name, email, conversationId: convId })}>
             {busy === "incoming_email" ? "Bezig…" : "Inkomende e-mail → escaleren"}
           </button>
           <button disabled={!!busy} onClick={() => run("ping")}>
@@ -260,6 +330,7 @@ export default function Dashboard() {
                   <th>Klant</th>
                   <th>E-mail</th>
                   <th>Kanaal</th>
+                  <th>Modus</th>
                   <th>Status</th>
                   <th>Medewerker</th>
                   <th>Zipchat-gesprek</th>
@@ -279,6 +350,11 @@ export default function Dashboard() {
                     <td>{s.customerName ?? <span className="dim">—</span>}</td>
                     <td className="dim">{s.customerEmail ?? "—"}</td>
                     <td>{s.channel}</td>
+                    <td>
+                      <span className={`badge ${s.mode === "livechat" ? "ok" : ""}`}>
+                        {s.mode === "livechat" ? "live chat" : "e-mail"}
+                      </span>
+                    </td>
                     <td><span className={`badge ${statusClass(s.status)}`}>{s.status}</span></td>
                     <td>
                       {s.agentName ?? <span className="dim">—</span>}

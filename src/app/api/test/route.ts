@@ -45,28 +45,36 @@ export async function POST(req: Request) {
 
     /* -------- Inkomende chat simuleren -------- */
     case "incoming_chat": {
-      const conversationId = body.conversationId?.trim() || `test-${Date.now()}`;
+      // Zonder echt Zipchat-gesprek laten we het id weg: een verzonnen id geeft
+      // met een live token gegarandeerd een 404 op het transcript.
+      const conversationId = body.conversationId?.trim() || undefined;
       const result = await escalate({
         conversationId,
+        summary: conversationId
+          ? undefined
+          : "Testescalatie vanuit het dashboard, geen echt Zipchat-gesprek gekoppeld.",
         name: body.name || "Testklant",
         email: body.email || "test@example.com",
         reason: "Testescalatie vanuit het dashboard",
         channel: "webchat",
       });
-      return NextResponse.json({ ...result, conversationId });
+      return NextResponse.json({ ...result, conversationId: conversationId ?? "(geen)" });
     }
 
     /* -------- Inkomende e-mail simuleren -------- */
     case "incoming_email": {
-      const conversationId = body.conversationId?.trim() || `test-mail-${Date.now()}`;
+      const conversationId = body.conversationId?.trim() || undefined;
       const result = await escalate({
         conversationId,
+        summary: conversationId
+          ? undefined
+          : "Testescalatie via het e-mailkanaal, geen echt Zipchat-gesprek gekoppeld.",
         name: body.name || "Testklant e-mail",
         email: body.email || "test@example.com",
         reason: "Testescalatie via e-mailkanaal",
         channel: "email",
       });
-      return NextResponse.json({ ...result, conversationId });
+      return NextResponse.json({ ...result, conversationId: conversationId ?? "(geen)" });
     }
 
     /* -------- Agent antwoordt vanuit MSC -------- */

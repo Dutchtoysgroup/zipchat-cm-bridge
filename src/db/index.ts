@@ -2,7 +2,7 @@ import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
 import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { config } from "@/lib/config";
-import { sessions, events, type Session, type NewSession, type BridgeEvent } from "./schema";
+import { sessions, events, settings, type Session, type NewSession, type BridgeEvent } from "./schema";
 
 export type EventInput = {
   sessionId?: number | null;
@@ -23,6 +23,8 @@ export interface Store {
   getSessionByCmChatId(cmChatId: string): Promise<Session | null>;
   listSessions(limit?: number): Promise<Session[]>;
   listOpenSessions(): Promise<Session[]>;
+  getSetting(key: string): Promise<string | null>;
+  setSetting(key: string, value: string): Promise<void>;
   logEvent(e: EventInput): Promise<void>;
   listEvents(limit?: number): Promise<BridgeEvent[]>;
   reset(): Promise<void>;
@@ -79,6 +81,18 @@ class NeonStore implements Store {
     return this.db.select().from(sessions).where(inArray(sessions.status, ["escalating", "active"]));
   }
 
+  async getSetting(key: string) {
+    const [row] = await this.db.select().from(settings).where(eq(settings.key, key)).limit(1);
+    return row?.value ?? null;
+  }
+
+  async setSetting(key: string, value: string) {
+    await this.db
+      .insert(settings)
+      .values({ key, value })
+      .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } });
+  }
+
   async logEvent(e: EventInput) {
     await this.db.insert(events).values({
       sessionId: e.sessionId ?? null,
@@ -112,6 +126,7 @@ class MemoryStore implements Store {
   readonly kind = "memory" as const;
   private sessions: Session[] = [];
   private events: BridgeEvent[] = [];
+  private settings = new Map<string, string>();
   private seqS = 1;
   private seqE = 1;
 
@@ -127,6 +142,7 @@ class MemoryStore implements Store {
       channel: "webchat",
       status: "escalating",
       reason: null,
+      mode: "email",
       handoverState: null,
       agentName: null,
       lastForwardedAt: null,
@@ -162,6 +178,12 @@ class MemoryStore implements Store {
   }
   async listOpenSessions() {
     return this.sessions.filter((s) => s.status === "escalating" || s.status === "active");
+  }
+  async getSetting(key: string) {
+    return this.settings.get(key) ?? null;
+  }
+  async setSetting(key: string, value: string) {
+    this.settings.set(key, value);
   }
   async logEvent(e: EventInput) {
     this.events.unshift({

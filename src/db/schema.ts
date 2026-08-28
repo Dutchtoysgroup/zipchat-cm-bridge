@@ -16,6 +16,8 @@ export const sessions = pgTable(
     channel: text("channel").notNull().default("webchat"),
     status: text("status").notNull().default("escalating"),
     reason: text("reason"),
+    /** "livechat" of "email" — de modus die gold toen dit gesprek binnenkwam. */
+    mode: text("mode").notNull().default("email"),
     /** Laatst gemelde handover-status uit de router (bijv. agentAssigned). */
     handoverState: text("handover_state"),
     /** Naam van de medewerker die het gesprek oppakte, als CM die meestuurt. */
@@ -49,3 +51,10 @@ export const events = pgTable(
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
 export type BridgeEvent = typeof events.$inferSelect;
+
+/** Instellingen die je in het dashboard omzet. */
+export const settings = pgTable("bridge_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

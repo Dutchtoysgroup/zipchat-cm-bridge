@@ -21,9 +21,33 @@ export type EscalateResult = {
   ok: boolean;
   sessionId?: number;
   cmChatId?: string;
+  /** Wat de assistent tegen de klant moet zeggen. Verschilt per modus. */
   message: string;
+  mode?: HandoverMode;
   mocked?: boolean;
 };
+
+export type HandoverMode = "livechat" | "email";
+
+export const MODE_KEY = "handover_mode";
+
+/** Standaard e-mail: beloof geen live medewerker als er niemand zit. */
+export async function getMode(): Promise<HandoverMode> {
+  const v = await store.getSetting(MODE_KEY);
+  return v === "livechat" ? "livechat" : "email";
+}
+
+export async function setMode(mode: HandoverMode): Promise<void> {
+  await store.setSetting(MODE_KEY, mode);
+  await store.logEvent({
+    direction: "internal",
+    kind: "settings.mode_changed",
+    summary:
+      mode === "livechat"
+        ? "Modus op LIVE CHAT gezet — klanten wordt een medewerker in de chat beloofd"
+        : "Modus op E-MAIL gezet — klanten krijgt antwoord per e-mail beloofd",
+  });
+}
 
 /**
  * De hoofdflow: Zipchat kan het niet meer aan, dus we tillen het gesprek
@@ -33,6 +57,10 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   const chatId = input.chatId ?? config.zipchat.chatId ?? "unknown-chat";
   const channel: Channel = input.channel ?? "webchat";
   const hasConversation = !!input.conversationId;
+  const mode = await getMode();
+  // In e-mailmodus zit er niemand in de chat: dan de AI niet pauzeren, want
+  // dan staat de klant helemaal met lege handen.
+  const liveChat = mode === "livechat" && hasConversation;
 
   // Zonder gespreks-id kunnen we geen transcript ophalen en geen antwoorden
   // terugbezorgen, maar het ticket moet er wél komen.
@@ -50,7 +78,11 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
       ok: true,
       sessionId: existing.id,
       cmChatId: existing.cmChatId ?? undefined,
-      message: "Dit gesprek staat al bij een medewerker.",
+      mode: existing.mode as HandoverMode,
+      message:
+        existing.mode === "livechat"
+          ? "Dit gesprek staat al bij een medewerker; zeg dat een collega het al heeft opgepakt."
+          : "De vraag is al doorgegeven; zeg dat er per e-mail antwoord komt en dat het niet nog een keer hoeft.",
     };
   }
 
@@ -86,6 +118,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     customerName: name,
     customerEmail: email,
     channel,
+    mode,
     status: "escalating",
     reason: input.reason ?? null,
     lastForwardedAt: new Date(),
@@ -101,7 +134,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
 
   // 3. AI pauzeren zodat de bot niet door de agent heen praat.
   const assigneeId = Number(config.zipchat.senderId);
-  const pause = hasConversation
+  const pause = liveChat
     ? await zipchat.setAssignment(conversationId, Number.isFinite(assigneeId) ? assigneeId : 0, chatId)
     : { ok: true as const, status: 0, error: undefined };
   await store.logEvent({
@@ -110,21 +143,29 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     kind: "escalate.pause_ai",
     ok: pause.ok,
     statusCode: pause.status,
-    summary: hasConversation
+    summary: liveChat
       ? pause.ok
         ? "AI gepauzeerd (manual mode)"
         : `AI pauzeren mislukt: ${pause.error}`
-      : "Geen gespreks-id — AI niet gepauzeerd, eenrichtingsticket",
+      : mode === "email"
+        ? "E-mailmodus — AI blijft actief, medewerker reageert per e-mail"
+        : "Geen gespreks-id — AI niet gepauzeerd, eenrichtingsticket",
   });
 
   // 4. Context + transcript als één openingsbericht naar de router.
+  const instructie = liveChat
+    ? "LIVE CHAT — de klant zit nu in de chat te wachten. Antwoord hier; je bericht komt direct in het chatvenster."
+    : `PER E-MAIL AFHANDELEN — de klant zit NIET in een live chat. Reageer naar ${email ?? "het e-mailadres hieronder"}.`;
+
   const header = [
+    instructie,
+    "",
     `Overgedragen door de AI-assistent (kanaal: ${channel}).`,
     name ? `Naam: ${name}` : null,
     email ? `E-mail: ${email}` : null,
     input.reason ? `Reden: ${input.reason}` : null,
     input.summary ? `Samenvatting door de assistent: ${input.summary}` : null,
-    hasConversation ? null : "LET OP: geen gespreks-id — antwoorden komen NIET terug in de chat. Reageer per e-mail.",
+    hasConversation ? null : "LET OP: geen gespreks-id — antwoorden komen sowieso niet terug in de chat.",
     "",
     hasConversation ? "--- Gespreksgeschiedenis ---" : null,
   ]
@@ -188,8 +229,11 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     ok: true,
     sessionId: session.id,
     cmChatId: realChatId,
+    mode,
     mocked: sent.mocked,
-    message: "Doorgezet naar een medewerker.",
+    message: liveChat
+      ? "Doorgezet. Zeg tegen de klant dat een collega het gesprek nu overneemt en dat die hier in de chat antwoordt."
+      : `Doorgezet. Zeg tegen de klant dat de klantenservice op dit moment niet live meekijkt, dat de vraag is doorgegeven, en dat er per e-mail${email ? ` (${email})` : ""} antwoord komt zodra een collega beschikbaar is.`,
   };
 }
 
@@ -214,6 +258,22 @@ export async function handleAgentReply(payload: cm.TwoWayPayload): Promise<{ ok:
       payload,
     });
     return { ok: false, delivered: 0, message: "Onbekende chat — geen gekoppelde Zipchat-sessie." };
+  }
+
+  if (session.mode === "email") {
+    const preview = cm.extractInboundTexts(payload).join(" | ").slice(0, 120);
+    await store.logEvent({
+      sessionId: session.id,
+      direction: "cm->bridge",
+      kind: "agent_reply.email_mode",
+      summary: `Antwoord in e-mailmodus, niet in de chat gezet: "${preview}"`,
+      payload,
+    });
+    return {
+      ok: true,
+      delivered: 0,
+      message: "E-mailmodus: dit gesprek loopt niet live, beantwoord de klant per e-mail.",
+    };
   }
 
   const texts = cm.extractInboundTexts(payload);

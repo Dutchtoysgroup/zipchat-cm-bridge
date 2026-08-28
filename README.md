@@ -1,5 +1,9 @@
 # Zipchat ↔ CM Mobile Service Cloud bridge
 
+**Live:** https://zipchat-cm-bridge.vercel.app — het dashboard zit achter Basic
+auth (gebruiker `exit`; wachtwoord staat in `.secrets-generated.txt`, en in
+Vercel als `DASHBOARD_PASSWORD`).
+
 Koppelt de Zipchat AI-assistent op de webshop aan **Mobile Service Cloud** van
 CM.com, via de **Conversational Router** (de "Twoway router"). Als de AI er niet
 uitkomt, vraagt hij naam en e-mailadres en tilt hij het gesprek — inclusief de
@@ -62,10 +66,24 @@ dus een Neon-database aanmaken en `npm run db:push` draaien.
 | `GET /api/sessions` · `GET /api/events` | dashboard | data |
 | `POST /api/test` | dashboard | testknoppen |
 
-Beveiliging: `/api/zipchat/escalate` verwacht `X-Bridge-Secret`, de CM-webhook
-`X-Bridge-Token`, en `/api/poll` het Vercel `CRON_SECRET`. Ontbreekt het
-bijbehorende geheim in de omgeving, dan laat de bridge door en waarschuwt het
-dashboard erover.
+Beveiliging in twee lagen:
+
+- **Machine-endpoints** (`/api/cm/*`, `/api/zipchat/*`, `/api/poll`) staan open
+  voor het internet, maar verwachten een gedeeld geheim in een header:
+  `X-Bridge-Secret` voor Zipchat, `X-Bridge-Token` voor CM, en het Vercel
+  `CRON_SECRET` voor de poller. Die geheimen verzin je zelf — je krijgt ze niet
+  van CM of Zipchat; je genereert een willekeurige string en zet dezelfde waarde
+  aan beide kanten neer.
+- **Het dashboard en zijn data-endpoints** zitten achter Basic auth
+  (`src/middleware.ts`), want daar staan klantnamen, e-mailadressen en
+  transcripten in. CM en Zipchat kunnen geen Basic auth meesturen, vandaar de
+  uitzondering hierboven.
+
+Ontbreekt een geheim in de omgeving, dan laat de bridge door en waarschuwt het
+dashboard erover — handig lokaal, niet de bedoeling in productie.
+
+De database draait bewust in **Frankfurt (eu-central-1)**: er staan
+persoonsgegevens van EU-klanten in.
 
 ## Wat er aan de CM-kant moet gebeuren
 

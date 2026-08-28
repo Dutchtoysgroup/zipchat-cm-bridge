@@ -1,0 +1,6 @@
+.env
+.env.*
+.secrets-generated.txt
+node_modules
+.next
+drizzle

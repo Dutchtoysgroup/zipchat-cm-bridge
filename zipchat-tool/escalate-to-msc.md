@@ -33,8 +33,15 @@ hoogstens één keer per gesprek aan.
 </task>
 
 <inputs_resolution>
-{CONVERSATION_ID} — het id van dit gesprek. Staat in je systeemcontext als het
-conversation-id; gebruik dat exact, verzin er nooit één.
+{CONVERSATION_ID} — het id van dit gesprek, exact zoals het in je
+systeemcontext staat. Verzin er nooit één. Kun je het niet met zekerheid
+vinden, laat het veld dan leeg ("") — de escalatie gaat dan alsnog door, alleen
+zonder gespreksgeschiedenis.
+
+{SUMMARY} — twee tot vier zinnen waarin je de vraag van de klant samenvat in
+het Nederlands, inclusief alles wat de medewerker nodig heeft (ordernummer,
+productnaam, wat al geprobeerd is). Dit stel je zelf op uit het gesprek. Dit is
+het vangnet als het gespreks-id ontbreekt, dus wees hier volledig.
 
 {NAME} — de voor- en achternaam van de klant. Vraag hier expliciet om als je
 die nog niet in het gesprek hebt gezien: "Om je door te verbinden met een
@@ -54,7 +61,7 @@ vraag die dan eerst en wacht op het antwoord.
 <execution_protocol>
 Eén netwerkcall:
 
-curl -sS -X POST "$MSC_BRIDGE_URL" -H "Content-Type: application/json" -H "X-Bridge-Secret: $MSC_BRIDGE_SECRET" -d '{"conversation_id":"{CONVERSATION_ID}","name":"{NAME}","email":"{EMAIL}","reason":"{REASON}","channel":"webchat"}'
+curl -sS -X POST "$MSC_BRIDGE_URL" -H "Content-Type: application/json" -H "X-Bridge-Secret: $MSC_BRIDGE_SECRET" -d '{"conversation_id":"{CONVERSATION_ID}","name":"{NAME}","email":"{EMAIL}","reason":"{REASON}","summary":"{SUMMARY}","channel":"webchat"}'
 
 Verwacht een HTTP 200 met een JSON-body waarin "ok" op true staat.
 </execution_protocol>

@@ -6,7 +6,10 @@ import { checkBridgeSecret } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 const Body = z.object({
-  conversation_id: z.union([z.string(), z.number()]).transform(String),
+  // Optioneel: lukt het de agent niet het gespreks-id te bepalen, dan willen we
+  // nog steeds een ticket aanmaken — liever zonder transcript dan geen ticket.
+  conversation_id: z.union([z.string(), z.number()]).transform(String).optional(),
+  summary: z.string().trim().max(2000).optional(),
   name: z.string().trim().min(1).optional(),
   email: z.string().trim().email().optional(),
   reason: z.string().trim().optional(),
@@ -36,6 +39,7 @@ export async function POST(req: Request) {
   const d = parsed.data;
   const result = await escalate({
     conversationId: d.conversation_id,
+    summary: d.summary,
     name: d.name,
     email: d.email,
     reason: d.reason,

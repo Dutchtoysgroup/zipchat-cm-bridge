@@ -6,7 +6,10 @@ import * as cm from "./cm";
 /* ------------------------------------------------------------- Escaleren */
 
 export type EscalateInput = {
-  conversationId: string;
+  /** Ontbreekt als de agent het gespreks-id niet kon bepalen. */
+  conversationId?: string;
+  /** Samenvatting door de agent; vangnet als er geen transcript op te halen is. */
+  summary?: string | null;
   name?: string | null;
   email?: string | null;
   reason?: string | null;
@@ -29,8 +32,13 @@ export type EscalateResult = {
 export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   const chatId = input.chatId ?? config.zipchat.chatId ?? "unknown-chat";
   const channel: Channel = input.channel ?? "webchat";
+  const hasConversation = !!input.conversationId;
 
-  const existing = await store.getSessionByZipchatConversation(input.conversationId);
+  // Zonder gespreks-id kunnen we geen transcript ophalen en geen antwoorden
+  // terugbezorgen, maar het ticket moet er wél komen.
+  const conversationId = input.conversationId ?? `zonder-id-${Date.now()}`;
+
+  const existing = await store.getSessionByZipchatConversation(conversationId);
   if (existing && (existing.status === "escalating" || existing.status === "active")) {
     await store.logEvent({
       sessionId: existing.id,
@@ -47,7 +55,9 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   }
 
   // 1. Transcript ophalen bij Zipchat.
-  const conv = await zipchat.getConversation(input.conversationId, { chatId });
+  const conv = hasConversation
+    ? await zipchat.getConversation(conversationId, { chatId })
+    : { ok: true as const, status: 0, data: null, error: undefined };
   if (!conv.ok) {
     await store.logEvent({
       direction: "zipchat->bridge",
@@ -55,7 +65,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
       ok: false,
       statusCode: conv.status,
       summary: conv.error,
-      payload: { conversationId: input.conversationId },
+      payload: { conversationId },
     });
     return { ok: false, message: `Transcript ophalen mislukt: ${conv.error}` };
   }
@@ -65,12 +75,12 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   const email = input.email ?? conv.data?.lead?.email ?? null;
 
   // 2. Sessie vastleggen.
-  const clientId = `zipchat:${input.conversationId}`;
+  const clientId = `zipchat:${conversationId}`;
   const cmChat = cm.buildChat({ conversationClientId: clientId, clientName: name, channel: mapChannel(channel) });
 
   const session = await store.createSession({
     zipchatChatId: chatId,
-    zipchatConversationId: String(input.conversationId),
+    zipchatConversationId: conversationId,
     cmChatId: cmChat.id,
     cmConversationClientId: clientId,
     customerName: name,
@@ -86,23 +96,25 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     direction: "zipchat->bridge",
     kind: "escalate.received",
     summary: `Escalatie voor ${name ?? "onbekende klant"} (${email ?? "geen e-mail"})`,
-    payload: { conversationId: input.conversationId, reason: input.reason, messages: messages.length },
+    payload: { conversationId, reason: input.reason, messages: messages.length, hasConversation },
   });
 
   // 3. AI pauzeren zodat de bot niet door de agent heen praat.
   const assigneeId = Number(config.zipchat.senderId);
-  const pause = await zipchat.setAssignment(
-    input.conversationId,
-    Number.isFinite(assigneeId) ? assigneeId : 0,
-    chatId,
-  );
+  const pause = hasConversation
+    ? await zipchat.setAssignment(conversationId, Number.isFinite(assigneeId) ? assigneeId : 0, chatId)
+    : { ok: true as const, status: 0, error: undefined };
   await store.logEvent({
     sessionId: session.id,
     direction: "bridge->zipchat",
     kind: "escalate.pause_ai",
     ok: pause.ok,
     statusCode: pause.status,
-    summary: pause.ok ? "AI gepauzeerd (manual mode)" : `AI pauzeren mislukt: ${pause.error}`,
+    summary: hasConversation
+      ? pause.ok
+        ? "AI gepauzeerd (manual mode)"
+        : `AI pauzeren mislukt: ${pause.error}`
+      : "Geen gespreks-id — AI niet gepauzeerd, eenrichtingsticket",
   });
 
   // 4. Context + transcript als één openingsbericht naar de router.
@@ -111,8 +123,10 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     name ? `Naam: ${name}` : null,
     email ? `E-mail: ${email}` : null,
     input.reason ? `Reden: ${input.reason}` : null,
+    input.summary ? `Samenvatting door de assistent: ${input.summary}` : null,
+    hasConversation ? null : "LET OP: geen gespreks-id — antwoorden komen NIET terug in de chat. Reageer per e-mail.",
     "",
-    "--- Gespreksgeschiedenis ---",
+    hasConversation ? "--- Gespreksgeschiedenis ---" : null,
   ]
     .filter(Boolean)
     .join("\n");

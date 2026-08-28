@@ -57,7 +57,9 @@ export default function Dashboard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [mode, setMode] = useState<"livechat" | "email" | null>(null);
+  const [mode, setMode] = useState<"auto" | "livechat" | "email" | null>(null);
+  const [live, setLive] = useState<boolean | null>(null);
+  const [presence, setPresence] = useState<string | null>(null);
   const [convId, setConvId] = useState("");
 
   const [name, setName] = useState("Testklant");
@@ -77,7 +79,11 @@ export default function Dashboard() {
       if (h.ok) setHealth(h);
       if (s.ok) setSessions(s.sessions ?? []);
       if (e.ok) setEvents(e.events ?? []);
-      if (m.ok) setMode(m.mode);
+      if (m.ok) {
+        setMode(m.mode);
+        setLive(m.live);
+        setPresence(m.presence?.raw ?? null);
+      }
     } catch {
       /* stil: volgende tik probeert opnieuw */
     }
@@ -104,7 +110,7 @@ export default function Dashboard() {
     if (selected === null && openSessions.length > 0) setSelected(openSessions[0].id);
   }, [openSessions, selected]);
 
-  async function switchMode(next: "livechat" | "email") {
+  async function switchMode(next: "auto" | "livechat" | "email") {
     setBusy("mode");
     try {
       const res = await fetch("/api/settings", {
@@ -115,13 +121,14 @@ export default function Dashboard() {
       const data = await res.json();
       if (data.ok) {
         setMode(data.mode);
-        setResult({
-          ok: true,
-          text:
-            next === "livechat"
-              ? "Modus: live chat. Nieuwe escalaties worden aan een medewerker in de chat beloofd."
-              : "Modus: e-mail. Nieuwe escalaties krijgen een e-mailbelofte; de AI blijft in de chat actief.",
-        });
+        setLive(data.live);
+        setPresence(data.presence?.raw ?? null);
+        const uitleg: Record<string, string> = {
+          auto: `Modus: automatisch. Mobile Service Cloud bepaalt het — op dit moment ${data.live ? "wél" : "géén"} live chat.`,
+          livechat: "Modus: live chat vastgezet. Elke escalatie belooft een medewerker in de chat.",
+          email: "Modus: e-mail vastgezet. Elke escalatie verwijst naar WhatsApp.",
+        };
+        setResult({ ok: true, text: uitleg[next] });
       } else {
         setResult({ ok: false, text: data.error ?? "Wisselen mislukt" });
       }
@@ -168,26 +175,43 @@ export default function Dashboard() {
         <h2>Bemensing</h2>
         <div className="row" style={{ gap: 8, alignItems: "center" }}>
           <button
+            className={mode === "auto" ? "primary" : undefined}
+            disabled={!!busy || mode === null}
+            onClick={() => switchMode("auto")}
+          >
+            Automatisch
+          </button>
+          <button
             className={mode === "livechat" ? "primary" : undefined}
             disabled={!!busy || mode === null}
             onClick={() => switchMode("livechat")}
           >
-            Live chat — er zit iemand klaar
+            Altijd live chat
           </button>
           <button
             className={mode === "email" ? "primary" : undefined}
             disabled={!!busy || mode === null}
             onClick={() => switchMode("email")}
           >
-            E-mail — niemand beschikbaar
+            Altijd WhatsApp
           </button>
-          <span className="dim" style={{ fontSize: 12 }}>
-            {mode === null
-              ? "…"
-              : mode === "livechat"
-                ? "De bot belooft de klant dat een collega het gesprek in de chat overneemt."
-                : "De bot zegt dat er per e-mail wordt gereageerd. De AI blijft actief in de chat."}
+          <span className={`badge ${live ? "ok" : "warn"}`}>
+            {live === null ? "…" : live ? "nu live chat" : "nu geen live chat"}
           </span>
+          {presence && (
+            <span className="dim mono" style={{ fontSize: 11 }}>
+              MSC meldt: {presence}
+            </span>
+          )}
+        </div>
+        <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
+          {mode === "auto"
+            ? "Mobile Service Cloud bepaalt per gesprek of er een medewerker beschikbaar is — dezelfde bron die HALO gebruikt."
+            : mode === "livechat"
+              ? "Handmatig vastgezet: elke escalatie belooft een medewerker in de chat, ook als MSC offline meldt."
+              : mode === "email"
+                ? "Handmatig vastgezet: elke escalatie verwijst naar WhatsApp, ook als er wél iemand beschikbaar is."
+                : ""}
         </div>
       </section>
 

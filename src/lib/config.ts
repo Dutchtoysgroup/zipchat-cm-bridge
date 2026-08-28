@@ -46,6 +46,12 @@ export const config = {
   cm: {
     twowayBaseUrl: opt("CM_TWOWAY_BASE_URL") ?? "https://api.conversational.cm.com/conversational/twoway/v2",
     routerControlBaseUrl: opt("CM_ROUTER_CONTROL_BASE_URL") ?? "https://api.cm.com/router/control/v1",
+    /**
+     * Het endpoint dat HALO gebruikt voor de handover. Let op: andere host én
+     * ander pad dan routerControlBaseUrl hierboven — die geeft 403, deze werkt.
+     */
+    conversationalControlBaseUrl:
+      opt("CM_CONVERSATIONAL_CONTROL_BASE_URL") ?? "https://api.conversational.cm.com/conversational/control/v1",
     /** technicalLinkId in de TwoWay-URL. */
     accountId: opt("CM_ACCOUNT_ID"),
     /** LogicalAccountId voor routing control (vaak gelijk aan accountId). */
@@ -76,6 +82,11 @@ export const config = {
     intervalMs: Number(opt("POLL_INTERVAL_MS") ?? 5_000),
     /** Sessie automatisch sluiten na zoveel minuten stilte. */
     idleTimeoutMin: Number(opt("POLL_IDLE_TIMEOUT_MIN") ?? 60),
+  },
+
+  /** Beschikbaarheidscheck van Mobile Service Cloud (zelfde bron als HALO). */
+  presence: {
+    url: opt("PRESENCE_URL"),
   },
 
   /** Wat we de klant beloven als er niemand live meekijkt. */

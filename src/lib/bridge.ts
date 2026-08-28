@@ -3,6 +3,7 @@ import { store, type Session } from "@/db";
 import * as zipchat from "./zipchat";
 import * as cm from "./cm";
 import { sendEscalationMail } from "./notify";
+import { checkPresence } from "./presence";
 
 /* ------------------------------------------------------------- Escaleren */
 
@@ -29,25 +30,55 @@ export type EscalateResult = {
 };
 
 export type HandoverMode = "livechat" | "email";
+/** Wat er in het dashboard staat ingesteld. "auto" vraagt het aan MSC zelf. */
+export type ModeSetting = HandoverMode | "auto";
 
 export const MODE_KEY = "handover_mode";
 
-/** Standaard e-mail: beloof geen live medewerker als er niemand zit. */
-export async function getMode(): Promise<HandoverMode> {
+/** De instelling uit het dashboard. Standaard "auto". */
+export async function getModeSetting(): Promise<ModeSetting> {
   const v = await store.getSetting(MODE_KEY);
-  return v === "livechat" ? "livechat" : "email";
+  if (v === "livechat" || v === "email") return v;
+  return "auto";
 }
 
-export async function setMode(mode: HandoverMode): Promise<void> {
+export async function setMode(mode: ModeSetting): Promise<void> {
   await store.setSetting(MODE_KEY, mode);
-  await store.logEvent({
-    direction: "internal",
-    kind: "settings.mode_changed",
-    summary:
-      mode === "livechat"
-        ? "Modus op LIVE CHAT gezet — klanten wordt een medewerker in de chat beloofd"
-        : "Modus op E-MAIL gezet — klanten krijgt antwoord per e-mail beloofd",
-  });
+  const uitleg: Record<ModeSetting, string> = {
+    auto: "Modus op AUTOMATISCH — Mobile Service Cloud bepaalt per gesprek of er iemand beschikbaar is",
+    livechat: "Modus op LIVE CHAT vastgezet — klanten wordt altijd een medewerker in de chat beloofd",
+    email: "Modus op E-MAIL vastgezet — klanten krijgen altijd een verwijzing naar WhatsApp",
+  };
+  await store.logEvent({ direction: "internal", kind: "settings.mode_changed", summary: uitleg[mode] });
+}
+
+/**
+ * Bepaalt of er nú live doorverbonden kan worden. In "auto" vragen we het aan
+ * Mobile Service Cloud; de handmatige standen negeren dat signaal bewust,
+ * zodat je het altijd kunt overrulen.
+ */
+export async function resolveLiveAvailability(): Promise<{
+  setting: ModeSetting;
+  live: boolean;
+  presence?: { online: boolean; raw: string; ok: boolean; error?: string };
+}> {
+  const setting = await getModeSetting();
+  if (setting === "livechat") return { setting, live: true };
+  if (setting === "email") return { setting, live: false };
+
+  const presence = await checkPresence();
+  if (!presence.ok) {
+    // Bij twijfel geen live chat beloven: een klant die op niemand zit te
+    // wachten is erger dan een klant die naar WhatsApp wordt verwezen.
+    await store.logEvent({
+      direction: "internal",
+      kind: "presence.failed",
+      ok: false,
+      summary: `Beschikbaarheid niet op te vragen (${presence.error}) — veiligheidshalve als offline behandeld`,
+    });
+    return { setting, live: false, presence };
+  }
+  return { setting, live: presence.online, presence };
 }
 
 /**
@@ -58,7 +89,15 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   const chatId = input.chatId ?? config.zipchat.chatId ?? "unknown-chat";
   const channel: Channel = input.channel ?? "webchat";
   const hasConversation = !!input.conversationId;
-  const setting = await getMode();
+  const availability = await resolveLiveAvailability();
+  const setting: HandoverMode = availability.live ? "livechat" : "email";
+  if (availability.presence) {
+    await store.logEvent({
+      direction: "internal",
+      kind: "presence.checked",
+      summary: `Mobile Service Cloud meldt: ${availability.presence.raw || "(leeg)"} → ${availability.live ? "live chat" : "geen live chat"}`,
+    });
+  }
 
   // Alleen als er echt iemand klaarzit hebben we naam en e-mail nodig; anders
   // is dat pure wrijving voor een klant die toch naar WhatsApp wordt verwezen.
@@ -265,7 +304,28 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     cmChat.id = realChatId;
   }
 
-  // 5. Router expliciet naar de agent-state duwen (indien geconfigureerd).
+  // 5. Handover aanvragen zoals HALO dat doet. Dit is het endpoint dat wél
+  // werkt met ons producttoken; de routing-control uit de documentatie niet.
+  if (liveChat) {
+    const mut = await cm.requestHandoverMutation({
+      chatId: realChatId,
+      name,
+      email,
+      referrer: "Zipchat",
+    });
+    await store.logEvent({
+      sessionId: session.id,
+      direction: "bridge->cm",
+      kind: "escalate.handover_request",
+      ok: mut.ok,
+      statusCode: mut.status,
+      summary: mut.ok
+        ? "Handover aangevraagd bij de router (mutationrequest)"
+        : `Handover aanvragen mislukt: ${mut.error}`,
+    });
+  }
+
+  // 5c. Router expliciet naar de agent-state duwen (indien geconfigureerd).
   if (config.cm.agentStateNameId) {
     const ctx: Record<string, string> = { channel, source: "zipchat" };
     if (email) ctx.email = email;

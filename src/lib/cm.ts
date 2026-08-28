@@ -190,3 +190,44 @@ export async function ping(): Promise<ApiResult<unknown>> {
   }
   return res;
 }
+
+/* ------------------------------------------------- Handover via mutationrequest */
+
+/**
+ * De handover zoals HALO hem doet. Dit is een ánder endpoint dan de
+ * routing-control uit de documentatie: die geeft 403 met ons producttoken,
+ * dit endpoint accepteert het wel.
+ *
+ * De mutaties zetten componenten of routingregels uit voor déze ene chat,
+ * zodat het gesprek bij een medewerker uitkomt in plaats van bij een bot.
+ */
+export async function requestHandoverMutation(params: {
+  chatId: string;
+  name?: string | null;
+  email?: string | null;
+  referrer?: string;
+}): Promise<ApiResult<unknown>> {
+  if (config.mockCm) return mock({ note: "mock: geen mutationrequest verstuurd", ...params });
+
+  const url = `${config.cm.conversationalControlBaseUrl}/accounts/${config.cm.logicalAccountId}/chats/${params.chatId}/routing/mutationrequests`;
+
+  const body = {
+    chatId: params.chatId,
+    Context: {
+      RoutingKeywords: "",
+      WebStoreReferrer: params.referrer ?? "Zipchat",
+      // CustomerInfo is een JSON-string binnen de JSON, precies zoals HALO het stuurt.
+      CustomerInfo: JSON.stringify({ name: params.name ?? "", email: params.email ?? "" }),
+    },
+    mutations: [{ $type: "disableComponent", ComponentId: "CMBot" }],
+  };
+
+  return requestJson(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Cm-Producttoken": config.cm.productToken ?? "",
+    },
+    body: JSON.stringify(body),
+  });
+}

@@ -35,11 +35,13 @@ export type ModeSetting = HandoverMode | "auto";
 
 export const MODE_KEY = "handover_mode";
 
-/** De instelling uit het dashboard. Standaard "auto". */
+/** De instelling uit het dashboard. Standaard "livechat". */
 export async function getModeSetting(): Promise<ModeSetting> {
   const v = await store.getSetting(MODE_KEY);
-  if (v === "livechat" || v === "email") return v;
-  return "auto";
+  if (v === "livechat" || v === "email" || v === "auto") return v;
+  // Sinds de router-koppeling werkt is live chat de normale gang van zaken;
+  // een lege database mag daar niet stilletjes van afwijken.
+  return "livechat";
 }
 
 export async function setMode(mode: ModeSetting): Promise<void> {
@@ -47,7 +49,7 @@ export async function setMode(mode: ModeSetting): Promise<void> {
   const uitleg: Record<ModeSetting, string> = {
     auto: "Modus op AUTOMATISCH — Mobile Service Cloud bepaalt per gesprek of er iemand beschikbaar is",
     livechat: "Modus op LIVE CHAT vastgezet — klanten wordt altijd een medewerker in de chat beloofd",
-    email: "Modus op E-MAIL vastgezet — klanten krijgen altijd een verwijzing naar WhatsApp",
+    email: "Modus op E-MAIL vastgezet — klanten krijgen altijd een antwoord per e-mail beloofd",
   };
   await store.logEvent({ direction: "internal", kind: "settings.mode_changed", summary: uitleg[mode] });
 }
@@ -69,7 +71,7 @@ export async function resolveLiveAvailability(): Promise<{
   const presence = await checkPresence();
   if (!presence.ok) {
     // Bij twijfel geen live chat beloven: een klant die op niemand zit te
-    // wachten is erger dan een klant die naar WhatsApp wordt verwezen.
+    // wachten is erger dan een klant die een antwoord per e-mail krijgt.
     await store.logEvent({
       direction: "internal",
       kind: "presence.failed",
@@ -99,18 +101,17 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     });
   }
 
-  // Alleen als er echt iemand klaarzit hebben we naam en e-mail nodig; anders
-  // is dat pure wrijving voor een klant die toch naar WhatsApp wordt verwezen.
-  if (setting === "livechat") {
-    const bezwaar = valideerKlantgegevens(input.name, input.email);
-    if (bezwaar) {
-      await store.logEvent({
-        direction: "zipchat->bridge",
-        kind: "escalate.details_needed",
-        summary: `Live chat actief maar klantgegevens niet bruikbaar: ${input.name ?? "(geen naam)"} / ${input.email ?? "(geen e-mail)"}`,
-      });
-      return { ok: true, mode: "livechat", message: `${needDetailsMessage()}\n\n${bezwaar}` };
-    }
+  // Naam en e-mailadres zijn altijd verplicht, ongeacht de modus. Ook een
+  // gesprek dat live in de chat wordt afgehandeld kan door de agent per mail
+  // worden opgevolgd, en een ticket zonder e-mailadres is een doodlopend spoor.
+  const bezwaar = valideerKlantgegevens(input.name, input.email);
+  if (bezwaar) {
+    await store.logEvent({
+      direction: "zipchat->bridge",
+      kind: "escalate.details_needed",
+      summary: `Klantgegevens niet bruikbaar: ${input.name ?? "(geen naam)"} / ${input.email ?? "(geen e-mail)"}`,
+    });
+    return { ok: true, mode: setting, message: `${needDetailsMessage()}\n\n${bezwaar}` };
   }
   // Live chat kan alleen als er iemand klaarstaat én we een gesprek hebben om
   // antwoorden in terug te leggen. Ontbreekt één van beide, dan is het e-mail —
@@ -138,7 +139,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
       message:
         existing.mode === "livechat"
           ? "Dit gesprek staat al bij een medewerker; zeg dat een collega het al heeft opgepakt."
-          : offlineMessage(),
+          : mailHandoverMessage(),
     };
   }
 
@@ -355,7 +356,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     mocked: sent.mocked,
     message: liveChat
       ? "Doorgezet. Zeg tegen de klant dat een collega het gesprek nu overneemt en dat die hier in de chat antwoordt."
-      : offlineMessage(),
+      : mailHandoverMessage(),
   };
 }
 
@@ -591,33 +592,24 @@ export function valideerKlantgegevens(name?: string | null, email?: string | nul
 }
 
 /**
- * Wat de assistent tegen de klant zegt als er niemand live meekijkt.
- * De tekst staat hier voluit — de bot moet 'm overnemen, niet zelf iets
- * verzinnen. De link moet letterlijk blijven staan: een bot die een URL
- * "netjes" herschrijft levert een link op die niet werkt.
+ * Wat de assistent tegen de klant zegt als het gesprek wel is doorgezet maar
+ * het antwoord niet in dit chatvenster terug kan komen. De tekst staat hier
+ * voluit — de bot moet 'm overnemen, niet zelf iets verzinnen.
  */
-function offlineMessage(): string {
-  const wa = config.followUp.whatsappUrl;
+function mailHandoverMessage(): string {
   const tijd = config.followUp.responseTime;
-
   const frans = [
-    "Malheureusement, aucun conseiller n'est disponible en direct pour le moment.",
-    wa
-      ? `Le moyen le plus rapide de nous contacter est d'envoyer un message sur notre WhatsApp : ${wa}.`
-      : "",
-    `Vous y recevez normalement une réponse sous ${tijd === "24 uur" ? "24 heures" : tijd}.`,
-  ]
-    .filter(Boolean)
-    .join(" ");
+    "Votre demande a bien ete transmise a un conseiller.",
+    `Vous recevrez une reponse par e-mail a l'adresse que vous avez indiquee, normalement sous ${tijd === "24 uur" ? "24 heures" : tijd}.`,
+  ].join(" ");
 
   return [
     "Geef de klant dit antwoord. Neem het over zoals het er staat:",
     "",
     frans,
     "",
-    "Is het gesprek niet in het Frans, vertaal het dan getrouw naar de taal van de klant" +
-      (wa ? ` en laat de link ${wa} exact ongewijzigd.` : "."),
-    "Beloof niets anders: geen terugbelverzoek, geen e-mail, geen medewerker in de chat.",
+    "Is het gesprek niet in het Frans, vertaal het dan getrouw naar de taal van de klant.",
+    "Beloof niets anders: geen terugbelverzoek, geen medewerker in dit chatvenster.",
   ].join("\n");
 }
 

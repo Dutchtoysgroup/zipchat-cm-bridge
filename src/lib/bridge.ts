@@ -562,6 +562,29 @@ const PLACEHOLDERS = new Set([
 /** De enige toegestane uitzondering: de klant weigert zijn naam te geven. */
 const NAAM_MARKER = "naam niet opgegeven";
 
+/**
+ * Domeinen die per definitie geen echte klant zijn. De eerste groep is door de
+ * RFC voor documentatie gereserveerd, de rest zijn adressen die een assistent
+ * verzint als hij toch iets moet invullen. Bewust kort gehouden: een te ruime
+ * lijst weigert echte klanten, en dat is erger dan een enkel nepadres.
+ */
+const NEP_DOMEINEN = new Set([
+  "example.com", "example.org", "example.net", "example.edu",
+  "test.com", "test.nl", "test.fr", "domain.com",
+  "unknown.com", "onbekend.nl", "inconnu.fr", "none.com", "email.example",
+]);
+
+/** Herkent een adres dat syntactisch klopt maar nergens aankomt. */
+function isNepAdres(email: string): boolean {
+  const [lokaal, domein] = email.toLowerCase().split("@");
+  if (!lokaal || !domein) return true;
+  if (NEP_DOMEINEN.has(domein)) return true;
+  if (/\.(test|invalid|example|localhost|local)$/.test(domein)) return true;
+  if (PLACEHOLDERS.has(kaal(lokaal))) return true;
+  if (/^(no-?reply|donotreply|do-not-reply)/.test(lokaal)) return true;
+  return false;
+}
+
 function kaal(v: string): string {
   return v.replace(/_/g, " ").replace(/\s+/g, " ").trim().replace(/^[.,:;!*\s]+|[.,:;!*\s]+$/g, "").toLowerCase();
 }
@@ -575,7 +598,8 @@ export function valideerKlantgegevens(name?: string | null, email?: string | nul
   const naamOk =
     nk.length >= 2 && !PLACEHOLDERS.has(nk) && !n.includes("@") && !/^\d+$/.test(nk.replace(/ /g, ""));
   const naamMarker = nk === NAAM_MARKER;
-  const mailOk = /^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(e) && !PLACEHOLDERS.has(ek);
+  const mailOk =
+    /^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(e) && !PLACEHOLDERS.has(ek) && !isNepAdres(e);
 
   if ((naamOk || naamMarker) && mailOk) return null;
 

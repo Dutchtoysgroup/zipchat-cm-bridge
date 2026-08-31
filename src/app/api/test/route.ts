@@ -55,7 +55,7 @@ export async function POST(req: Request) {
           ? undefined
           : "Testescalatie vanuit het dashboard, geen echt Zipchat-gesprek gekoppeld.",
         name: body.name || "Testklant",
-        email: body.email || "test@example.com",
+        email: body.email || "koppelingstest@dutchtoysgroup.com",
         reason: "Testescalatie vanuit het dashboard",
         channel: "webchat",
       });
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
           ? undefined
           : "Testescalatie via het e-mailkanaal, geen echt Zipchat-gesprek gekoppeld.",
         name: body.name || "Testklant e-mail",
-        email: body.email || "test@example.com",
+        email: body.email || "koppelingstest@dutchtoysgroup.com",
         reason: "Testescalatie via e-mailkanaal",
         channel: "email",
       });
@@ -133,7 +133,7 @@ export async function POST(req: Request) {
     case "mail": {
       const res = await sendEscalationMail({
         name: body.name || "Testklant",
-        email: body.email || "test@example.com",
+        email: body.email || "koppelingstest@dutchtoysgroup.com",
         reason: "Testmail vanuit het dashboard",
         summary: "Dit is een test om te controleren of de escalatiemail aankomt. Geen actie nodig.",
         transcript: "Klant: test\nAI: test",

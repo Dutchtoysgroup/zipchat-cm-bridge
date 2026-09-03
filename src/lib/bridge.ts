@@ -310,24 +310,28 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
 
   // 5. Handover aanvragen zoals HALO dat doet. Dit is het endpoint dat wél
   // werkt met ons producttoken; de routing-control uit de documentatie niet.
-  if (liveChat) {
-    const mut = await cm.requestHandoverMutation({
-      chatId: realChatId,
-      name,
-      email,
-      referrer: "Zipchat",
-    });
-    await store.logEvent({
-      sessionId: session.id,
-      direction: "bridge->cm",
-      kind: "escalate.handover_request",
-      ok: mut.ok,
-      statusCode: mut.status,
-      summary: mut.ok
-        ? "Handover aangevraagd bij de router (mutationrequest)"
-        : `Handover aanvragen mislukt: ${mut.error}`,
-    });
-  }
+  // Altijd aanroepen, ook in e-mailmodus: dit stuurt naam/e-mail mee als
+  // CustomerInfo in de routing-context. LET OP: dit vult het profielpaneel
+  // in Robin niet betrouwbaar — bevestigd op 2 sep 2026, een ticket met een
+  // succesvolle (201) aanroep hier miste alsnog het e-mailadres in Robin en
+  // moest handmatig gekoppeld worden. De echte koppelmethode is nog niet
+  // gevonden; zie project-memory zipchat-cm-bridge voor de laatste stand.
+  const mut = await cm.requestHandoverMutation({
+    chatId: realChatId,
+    name,
+    email,
+    referrer: "Zipchat",
+  });
+  await store.logEvent({
+    sessionId: session.id,
+    direction: "bridge->cm",
+    kind: "escalate.handover_request",
+    ok: mut.ok,
+    statusCode: mut.status,
+    summary: mut.ok
+      ? "Handover aangevraagd bij de router (mutationrequest)"
+      : `Handover aanvragen mislukt: ${mut.error}`,
+  });
 
   // 5c. Router expliciet naar de agent-state duwen (indien geconfigureerd).
   if (config.cm.agentStateNameId) {
@@ -355,7 +359,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     mode,
     mocked: sent.mocked,
     message: liveChat
-      ? "Doorgezet. Zeg tegen de klant dat een collega het gesprek nu overneemt en dat die hier in de chat antwoordt."
+      ? "Doorgezet. Zeg tegen de klant dat een collega zo snel mogelijk contact met hem opneemt via e-mail."
       : mailHandoverMessage(),
   };
 }

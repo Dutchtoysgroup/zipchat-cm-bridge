@@ -170,14 +170,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   // 2. Sessie vastleggen.
   mode = liveChat ? "livechat" : "email";
 
-  // Experiment (3 sep 2026, op verzoek Sven): CM/Robin lijkt de contactidentiteit
-  // in het Profiel-paneel af te leiden van chat.conversationClientId — bij een
-  // echt kanaal zoals WhatsApp is dat het telefoonnummer, en CM matcht dat tegen
-  // een bekend contact. Ons opaque "zipchat:{id}" gaf niets om op te matchen; het
-  // e-mailadres was al gevalideerd verplicht, dus dat gebruiken we nu als identiteit.
-  // Nog niet bevestigd of dit Robin's Profiel-paneel daadwerkelijk vult — testen
-  // met een echte escalatie en in Robin controleren.
-  const clientId = email ?? `zipchat:${conversationId}`;
+  const clientId = `zipchat:${conversationId}`;
   const cmChat = cm.buildChat({ conversationClientId: clientId, clientName: name, channel: mapChannel(channel) });
 
   const session = await store.createSession({

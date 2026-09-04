@@ -91,8 +91,12 @@ export const config = {
 
   /** Wat we de klant beloven als er niemand live meekijkt. */
   followUp: {
-    /** Verwachte reactietijd, in de tekst van de bot. */
-    responseTime: opt("RESPONSE_TIME_TEXT") ?? "24 uur",
+    /**
+     * Verwachte reactietijd, in de tekst van de bot. Leeg laten (standaard) en
+     * de bot belooft geen termijn maar "zo snel mogelijk" — een harde 24 uur
+     * halen we niet altijd, en een gemiste belofte is erger dan geen belofte.
+     */
+    responseTime: opt("RESPONSE_TIME_TEXT"),
     /** Directe WhatsApp-link; leeg laten om het niet te noemen. */
     whatsappUrl: opt("WHATSAPP_URL"),
   },

@@ -625,10 +625,13 @@ export function valideerKlantgegevens(name?: string | null, email?: string | nul
  * voluit — de bot moet 'm overnemen, niet zelf iets verzinnen.
  */
 function mailHandoverMessage(): string {
-  const tijd = config.followUp.responseTime;
+  const tijd = config.followUp.responseTime?.trim();
+  const termijn = tijd
+    ? `normalement sous ${tijd === "24 uur" ? "24 heures" : tijd}`
+    : "dans les meilleurs delais";
   const frans = [
     "Votre demande a bien ete transmise a un conseiller.",
-    `Vous recevrez une reponse par e-mail a l'adresse que vous avez indiquee, normalement sous ${tijd === "24 uur" ? "24 heures" : tijd}.`,
+    `Vous recevrez une reponse par e-mail a l'adresse que vous avez indiquee, ${termijn}.`,
   ].join(" ");
 
   return [

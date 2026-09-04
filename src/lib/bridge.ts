@@ -164,6 +164,9 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   const transcriptOk = conv.ok;
   if (!transcriptOk) liveChat = false; // zonder werkend gesprek geen live chat
   const messages = conv.data?.messages ?? [];
+  // Het hele gesprek gaat mee naar het ticket, niet alleen de samenvatting van
+  // de assistent: de medewerker moet kunnen lezen wat de klant echt zei.
+  const transcript = zipchat.formatTranscript(messages);
   const name = input.name ?? conv.data?.lead?.name ?? null;
   const email = input.email ?? conv.data?.lead?.email ?? null;
 
@@ -216,13 +219,15 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   });
 
   // 4. Context + transcript als één openingsbericht naar de router.
+  // In e-mailmodus staat er bewust geen instructieregel boven het ticket: het
+  // e-mailadres staat er toch al onder, en Robin weet zelf hoe hij antwoordt.
   const instructie = liveChat
     ? "LIVE CHAT — de klant zit nu in de chat te wachten. Antwoord hier; je bericht komt direct in het chatvenster."
-    : `PER E-MAIL AFHANDELEN — de klant zit NIET in een live chat. Reageer naar ${email ?? "het e-mailadres hieronder"}.`;
+    : null;
 
   const header = [
     instructie,
-    "",
+    instructie ? "" : null,
     `Overgedragen door de AI-assistent (kanaal: ${channel}).`,
     name ? `Naam: ${name}` : null,
     email ? `E-mail: ${email}` : null,
@@ -230,18 +235,18 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     input.summary ? `Samenvatting door de assistent: ${input.summary}` : null,
     hasConversation && !transcriptOk
       ? "LET OP: gespreksgeschiedenis kon niet opgehaald worden bij Zipchat."
-      : hasConversation
-        ? null
-        : "LET OP: geen gespreks-id — antwoorden komen sowieso niet terug in de chat.",
+      : hasConversation && !transcript
+        ? "LET OP: Zipchat gaf geen berichten terug voor dit gesprek."
+        : null,
     "",
-    hasConversation ? "--- Gespreksgeschiedenis ---" : null,
+    transcript ? "--- Volledig gesprek ---" : null,
   ]
     .filter(Boolean)
     .join("\n");
 
   const payload: cm.TwoWayPayload = {
     chat: cmChat,
-    conversationMessages: [cm.textMessage(`${header}\n${zipchat.formatTranscript(messages)}`)],
+    conversationMessages: [cm.textMessage(transcript ? `${header}\n${transcript}` : header)],
   };
 
   const sent = await cm.sendToRouter(payload);
@@ -275,7 +280,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     email,
     reason: input.reason,
     summary: input.summary,
-    transcript: messages.length ? zipchat.formatTranscript(messages) : null,
+    transcript: transcript || null,
     channel,
     sessionId: session.id,
   });
@@ -487,7 +492,7 @@ export async function pollOnce(): Promise<{ checked: number; forwarded: number; 
           channel: mapChannel(session.channel as Channel),
           chatId: session.cmChatId ?? undefined,
         }),
-        conversationMessages: [cm.textMessage(m.message, "ClientOriginated")],
+        conversationMessages: [cm.textMessage(zipchat.messageText(m), "ClientOriginated")],
       });
       await store.logEvent({
         sessionId: session.id,
@@ -495,7 +500,7 @@ export async function pollOnce(): Promise<{ checked: number; forwarded: number; 
         kind: "poll.forwarded",
         ok: res.ok,
         statusCode: res.status,
-        summary: res.ok ? `Klantbericht doorgestuurd: "${truncate(m.message)}"` : `Doorsturen mislukt: ${res.error}`,
+        summary: res.ok ? `Klantbericht doorgestuurd: "${truncate(zipchat.messageText(m))}"` : `Doorsturen mislukt: ${res.error}`,
       });
       if (res.ok) forwarded++;
     }

@@ -68,12 +68,20 @@ export default function Dashboard() {
 
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  /**
+   * Elke tik zijn drie databasequeries, en elke query houdt de Neon-compute
+   * weer minuten wakker. Een dashboard dat de hele dag openstaat was daarmee
+   * de duurste "gebruiker" van de bridge; 15 seconden is voor meekijken bij een
+   * gesprek ruim genoeg.
+   */
+  const REFRESH_MS = 15_000;
+
   const refresh = useCallback(async () => {
     try {
       const [h, s, e, m] = await Promise.all([
         fetch("/api/health").then((r) => r.json()),
         fetch("/api/sessions").then((r) => r.json()),
-        fetch("/api/events?limit=150").then((r) => r.json()),
+        fetch("/api/events?limit=60").then((r) => r.json()),
         fetch("/api/settings").then((r) => r.json()),
       ]);
       if (h.ok) setHealth(h);
@@ -90,14 +98,24 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  useEffect(() => {
-    if (timer.current) clearInterval(timer.current);
-    if (autoRefresh) timer.current = setInterval(refresh, 3000);
-    return () => {
+    const stop = () => {
       if (timer.current) clearInterval(timer.current);
+      timer.current = null;
+    };
+    // Een tabblad op de achtergrond hoeft niets te verversen — maar hield wel
+    // de database wakker. Ververs alleen wat zichtbaar is.
+    const sync = () => {
+      stop();
+      if (autoRefresh && document.visibilityState === "visible") {
+        refresh();
+        timer.current = setInterval(refresh, REFRESH_MS);
+      }
+    };
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", sync);
     };
   }, [autoRefresh, refresh]);
 
@@ -420,7 +438,7 @@ export default function Dashboard() {
               onChange={(e) => setAutoRefresh(e.target.checked)}
               style={{ minWidth: "auto" }}
             />
-            elke 3s verversen
+            elke 15s verversen
           </label>
         </div>
         <div className="scroll">

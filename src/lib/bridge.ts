@@ -225,28 +225,34 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     ? "LIVE CHAT — de klant zit nu in de chat te wachten. Antwoord hier; je bericht komt direct in het chatvenster."
     : null;
 
-  const header = [
-    instructie,
-    instructie ? "" : null,
-    `Overgedragen door de AI-assistent (kanaal: ${channel}).`,
-    name ? `Naam: ${name}` : null,
-    email ? `E-mail: ${email}` : null,
-    input.reason ? `Reden: ${input.reason}` : null,
-    input.summary ? `Samenvatting door de assistent: ${input.summary}` : null,
+  // Blokken worden gescheiden door een lege regel; binnen een blok staan de
+  // regels onder elkaar. Robin toont het ticket als platte tekst, dus die
+  // witruimte is het enige wat het leesbaar houdt.
+  const gegevens = [name ? `Naam: ${name}` : null, email ? `E-mail: ${email}` : null, input.reason ? `Reden: ${input.reason}` : null]
+    .filter(Boolean)
+    .join("\n");
+
+  const waarschuwing =
     hasConversation && !transcriptOk
       ? "LET OP: gespreksgeschiedenis kon niet opgehaald worden bij Zipchat."
       : hasConversation && !transcript
         ? "LET OP: Zipchat gaf geen berichten terug voor dit gesprek."
-        : null,
-    "",
+        : null;
+
+  const header = [
+    instructie,
+    `Overgedragen door de AI-assistent (kanaal: ${channel}).`,
+    gegevens || null,
+    input.summary ? `Samenvatting door de assistent: ${input.summary}` : null,
+    waarschuwing,
     transcript ? "--- Volledig gesprek ---" : null,
   ]
     .filter(Boolean)
-    .join("\n");
+    .join("\n\n");
 
   const payload: cm.TwoWayPayload = {
     chat: cmChat,
-    conversationMessages: [cm.textMessage(transcript ? `${header}\n${transcript}` : header)],
+    conversationMessages: [cm.textMessage(transcript ? `${header}\n\n${transcript}` : header)],
   };
 
   const sent = await cm.sendToRouter(payload);
@@ -443,13 +449,24 @@ export async function handleAgentReply(payload: cm.TwoWayPayload): Promise<{ ok:
 
 /* --------------------------------------- Klantberichten pollen (Zipchat heeft geen webhook) */
 
-export async function pollOnce(): Promise<{ checked: number; forwarded: number; closed: number }> {
-  // Alleen live-chatsessies met een echt Zipchat-gesprek zijn de moeite waard.
-  // In e-mailmodus praat de klant gewoon door met de AI; die berichten horen
-  // niet bij CM. En een sessie zonder gespreks-id heeft niets om op te halen.
-  const open = (await store.listOpenSessions()).filter(
+/**
+ * Alleen live-chatsessies met een echt Zipchat-gesprek zijn de moeite waard.
+ * In e-mailmodus praat de klant gewoon door met de AI; die berichten horen
+ * niet bij CM. En een sessie zonder gespreks-id heeft niets om op te halen.
+ */
+async function pollableSessions(): Promise<Session[]> {
+  return (await store.listOpenSessions()).filter(
     (s) => s.mode === "livechat" && !s.zipchatConversationId.startsWith("zonder-id-"),
   );
+}
+
+/** Eén query: moet er überhaupt gepolld worden? Houdt de idle-cron goedkoop. */
+export async function countPollable(): Promise<number> {
+  return (await pollableSessions()).length;
+}
+
+export async function pollOnce(): Promise<{ checked: number; forwarded: number; closed: number }> {
+  const open = await pollableSessions();
   let forwarded = 0;
   let closed = 0;
 

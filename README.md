@@ -37,9 +37,33 @@ Klant ──▶ Zipchat-widget ──▶ AI kan het niet aan
 ```
 
 Klantberichten tijdens een handover worden **gepolld** (`/api/poll`), omdat
-Zipchat geen webhook aanbiedt. De cron draait elke minuut en loopt binnen die
-minuut door met een interval van 5 seconden, zodat de latency ~5s is in plaats
-van 60s. Draait er geen enkel gesprek, dan stopt de invocatie meteen.
+Zipchat geen webhook aanbiedt. Eén invocatie pollt ~50 seconden door met een
+interval van 5 seconden, en start daarna zichzelf opnieuw zolang er een gesprek
+open staat. Draait er niets, dan doet `/api/poll` één query en stopt meteen.
+
+### Waarom de cron maar elke 15 minuten draait
+
+Neon rekent per compute-uur, en élke query wekt de compute — die daarna nog
+minuten wakker blijft. Een cron per minuut betekende dus 24/7 een draaiende
+database, ook 's nachts zonder één gesprek; dat was verreweg de grootste post op
+de rekening. Daarom:
+
+* De pollketting wordt gestart door de gebeurtenis zelf: een escalatie
+  (`/api/zipchat/escalate`) en een agentantwoord (`/api/cm/webhook`) trappen
+  `/api/poll` af, en elk venster start het volgende zolang er sessies open zijn.
+  De latency tijdens een gesprek blijft daarmee ~5 seconden.
+* De cron in `vercel.json` is nog slechts een **vangnet** (elke 15 minuten) voor
+  het geval de ketting breekt door een deploy of een fout.
+* Een tweede venster kan niet naast een lopende ketting starten: `/api/poll`
+  neemt een lease (`bridge_settings.poll_lease`) en gaat anders meteen weg.
+* Het dashboard ververst elke 15 seconden in plaats van elke 3, en stopt zodra
+  het tabblad naar de achtergrond gaat — een openstaand tabblad hield de
+  database anders in zijn eentje de hele dag wakker.
+
+Zet in Neon de **scale-to-zero op 1 minuut** (in plaats van de standaard 5) om
+het effect compleet te maken: dan kost een vangnet-cron nog ~1 minuut compute in
+plaats van 5. `POLL_SELF_CHAIN=false` zet de ketting uit en valt terug op alleen
+de cron — verhoog dan ook weer de cronfrequentie.
 
 ## Aan de praat krijgen
 

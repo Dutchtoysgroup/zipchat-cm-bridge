@@ -82,6 +82,13 @@ export const config = {
     intervalMs: Number(opt("POLL_INTERVAL_MS") ?? 5_000),
     /** Sessie automatisch sluiten na zoveel minuten stilte. */
     idleTimeoutMin: Number(opt("POLL_IDLE_TIMEOUT_MIN") ?? 60),
+    /**
+     * Laat een lopend gesprek zichzelf doorpollen in plaats van te wachten op
+     * de volgende cron. Dat is de reden dat de cron maar eens per 15 minuten
+     * hoeft te draaien — en dus dat de Neon-compute 's nachts kan slapen.
+     * Uitzetten ("false") valt terug op alleen de cron.
+     */
+    selfChain: opt("POLL_SELF_CHAIN") !== "false",
   },
 
   /** Beschikbaarheidscheck van Mobile Service Cloud (zelfde bron als HALO). */

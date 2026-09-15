@@ -190,5 +190,7 @@ export function formatTranscript(messages: ZipchatMessage[] = []): string {
       return `${who}: ${messageText(m)}`;
     })
     .filter((r) => r.split(": ").slice(1).join(": ").trim() !== "")
-    .join("\n");
+    // Lege regel tussen elke beurt: in Robin is het ticket platte tekst en
+    // zonder witruimte loopt het hele gesprek als één blok in elkaar over.
+    .join("\n\n");
 }

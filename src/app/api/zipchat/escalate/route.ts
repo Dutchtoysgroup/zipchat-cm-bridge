@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { escalate } from "@/lib/bridge";
 import { checkBridgeSecret } from "@/lib/auth";
+import { kickPoll, originOf } from "@/lib/pollChain";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,14 @@ export async function POST(req: Request) {
     channel: d.channel,
     chatId: d.chat_id,
   });
+
+  // Een live handover moet meteen gepolld worden; wachten op de volgende cron
+  // zou de klant minuten kosten. Andersom hoeft die cron daardoor nog maar
+  // zelden te draaien, wat de database (en dus de rekening) laat slapen.
+  if (result.ok && result.mode === "livechat") {
+    const origin = originOf(req);
+    after(() => kickPoll(origin));
+  }
 
   // De Zipchat-tool leest dit antwoord; houd het kort en klantvriendelijk.
   return NextResponse.json(result, { status: result.ok ? 200 : 502 });

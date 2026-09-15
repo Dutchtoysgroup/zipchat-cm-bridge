@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { handleAgentReply } from "@/lib/bridge";
 import { checkCmWebhookSecret } from "@/lib/auth";
 import { readTolerantJson } from "@/lib/readBody";
 import { store } from "@/db";
 import type { TwoWayPayload } from "@/lib/cm";
+import { kickPoll, originOf } from "@/lib/pollChain";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,13 @@ export async function POST(req: Request) {
   });
 
   const result = await handleAgentReply(payload);
+
+  // Een agent die antwoordt betekent dat het gesprek loopt. Draait de pollketting
+  // niet meer (deploy, crash), dan start hij hier weer — zonder dat de cron
+  // daarvoor de hele dag hoeft te draaien.
+  const origin = originOf(req);
+  after(() => kickPoll(origin));
+
   // Altijd 200 richting CM tenzij het echt onze schuld is: anders blijft de
   // router hetzelfde bericht opnieuw aanbieden.
   return NextResponse.json(result, { status: 200 });

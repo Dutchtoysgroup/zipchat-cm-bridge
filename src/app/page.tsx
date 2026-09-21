@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Health = {
   mockMode: boolean;
-  storage: "neon" | "memory";
+  storage: "postgres" | "memory";
   openSessions: number;
   missing: string[];
   warnings: string[];
@@ -69,10 +69,8 @@ export default function Dashboard() {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /**
-   * Elke tik zijn drie databasequeries, en elke query houdt de Neon-compute
-   * weer minuten wakker. Een dashboard dat de hele dag openstaat was daarmee
-   * de duurste "gebruiker" van de bridge; 15 seconden is voor meekijken bij een
-   * gesprek ruim genoeg.
+   * Elke tik zijn vier databasequeries op de gedeelde centrale database;
+   * 15 seconden is voor meekijken bij een gesprek ruim genoeg.
    */
   const REFRESH_MS = 15_000;
 
@@ -252,8 +250,8 @@ export default function Dashboard() {
           <div className="stat">
             <div className="k">Opslag</div>
             <div className="v">
-              <span className={`badge ${health?.storage === "neon" ? "ok" : "warn"}`}>
-                {health?.storage === "neon" ? "Neon" : health ? "In-memory" : "…"}
+              <span className={`badge ${health?.storage === "postgres" ? "ok" : "warn"}`}>
+                {health?.storage === "postgres" ? "Azure PostgreSQL" : health ? "In-memory" : "…"}
               </span>
             </div>
           </div>

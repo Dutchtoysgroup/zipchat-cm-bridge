@@ -1,26 +1,31 @@
 import { config } from "./config";
 
 /**
- * De poll-cron is de duurste post van dit project: elke aanroep wekt de Neon-
- * compute, en die blijft daarna nog minuten wakker. Draaide de cron elke minuut,
- * dan sliep de database dus nooit — ook 's nachts zonder één gesprek.
- *
- * Daarom draait de cron nu op grote afstand (zie vercel.json) en houden lopende
- * gesprekken zichzelf warm: /api/poll roept zichzelf opnieuw aan zolang er open
- * sessies zijn. Latency blijft ~5s tijdens een handover, terwijl er in rust
- * niets naar de database gaat.
+ * Lopende gesprekken houden zichzelf warm: /api/poll roept zichzelf opnieuw aan
+ * zolang er open sessies zijn, zodat de latency tijdens een handover ~5s blijft.
+ * De cron (Logic App `cron-zipchat-bridge-poll`) is alleen een vangnet voor als
+ * de ketting breekt, bijvoorbeeld door een herstart.
  */
 export function pollUrl(origin: string): string {
   return new URL("/api/poll", origin).toString();
 }
 
-/** Basis-URL van deze deployment, afgeleid van het binnenkomende verzoek. */
+/**
+ * Basis-URL van deze deployment. Op App Service eindigt TLS vóór de app, dus
+ * req.url begint met http:// — een zelfaanroep daarheen wordt omgeleid naar
+ * https en verliest onderweg zijn Authorization-header. Daarom bij voorkeur de
+ * vaste BRIDGE_PUBLIC_URL, anders de host uit x-forwarded-proto/-host.
+ */
 export function originOf(req: Request): string | null {
+  const fixed = process.env.BRIDGE_PUBLIC_URL?.trim();
+  if (fixed) return fixed.replace(/\/+$/, "");
   try {
-    return new URL(req.url).origin;
+    const url = new URL(req.url);
+    const proto = req.headers.get("x-forwarded-proto")?.split(",")[0].trim() ?? url.protocol.replace(":", "");
+    const host = req.headers.get("x-forwarded-host")?.split(",")[0].trim() ?? req.headers.get("host") ?? url.host;
+    return `${proto}://${host}`;
   } catch {
-    const host = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
-    return host ? `https://${host}` : null;
+    return null;
   }
 }
 

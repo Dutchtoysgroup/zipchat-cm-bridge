@@ -1,0 +1,53 @@
+# Build & deploy naar Azure App Service dtg-zipchat-cm-bridge-weu
+# (Workflow-n8n-RG, op het plan asp-n8n-dtg).
+#
+# Elke push naar main deployt, net als vroeger op Vercel. De runner bouwt de
+# standalone bundle; App Service start hem met `node server.js` en bouwt zelf
+# niets (SCM_DO_BUILD_DURING_DEPLOYMENT=false). Bouwen en deployen in één job,
+# zodat de zip niet als Actions-artifact bewaard hoeft te worden.
+
+name: Deploy naar Azure App Service
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-azure
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+          cache: npm
+
+      - name: Install & build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: |
+          npm ci
+          npm run build
+
+      - name: Standalone bundle samenstellen
+        run: |
+          # server.js + getracete node_modules zitten erin, de static assets niet.
+          cp -r .next/static .next/standalone/.next/static
+          if [ -d public ]; then cp -r public .next/standalone/public; fi
+          cd .next/standalone && zip -qr ../../app.zip .
+
+      - name: Deploy
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: dtg-zipchat-cm-bridge-weu
+          slot-name: Production
+          package: app.zip
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_ZIPCHAT_BRIDGE }}

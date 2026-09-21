@@ -1,6 +1,7 @@
-import { drizzle } from "drizzle-orm/neon-http";
-import { neon } from "@neondatabase/serverless";
-import { and, desc, eq, inArray, lt } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool, type PoolConfig } from "pg";
+import { DefaultAzureCredential } from "@azure/identity";
+import { and, desc, eq, inArray, isNotNull, lt } from "drizzle-orm";
 import { config } from "@/lib/config";
 import { sessions, events, settings, type Session, type NewSession, type BridgeEvent } from "./schema";
 
@@ -15,7 +16,7 @@ export type EventInput = {
 };
 
 export interface Store {
-  readonly kind: "neon" | "memory";
+  readonly kind: "postgres" | "memory";
   createSession(s: NewSession): Promise<Session>;
   updateSession(id: number, patch: Partial<NewSession>): Promise<Session | null>;
   getSessionById(id: number): Promise<Session | null>;
@@ -27,17 +28,64 @@ export interface Store {
   setSetting(key: string, value: string): Promise<void>;
   logEvent(e: EventInput): Promise<void>;
   listEvents(limit?: number): Promise<BridgeEvent[]>;
+  /** Bewaartermijn: events weg, naam en e-mail van gesloten sessies leeg. */
+  purgeOlderThan(cutoff: Date): Promise<{ events: number; sessions: number }>;
   reset(): Promise<void>;
 }
 
-/* ------------------------------------------------------------------ Neon */
+/* -------------------------------------------------------------- Postgres */
 
-class NeonStore implements Store {
-  readonly kind = "neon" as const;
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+/**
+ * Productie draait op het centrale DTG-dataplatform (`dtg-data-platform-pg`,
+ * schema `app_zipchat_bridge`). Daar bestaan geen wachtwoorden: met
+ * DATABASE_AUTH=entra haalt de App Service met zijn managed identity een token
+ * op, en dat token ís het wachtwoord. De gebruikersnaam in DATABASE_URL is de
+ * naam van de App Service.
+ *
+ * TLS wordt altijd geverifieerd, behalve tegen een database op de machine zelf.
+ * sslmode e.d. halen we uit de URL, omdat pg die boven het ssl-object laat gaan.
+ */
+function poolConfig(connectionString: string): PoolConfig {
+  const url = new URL(connectionString);
+  for (const key of ["sslmode", "sslcert", "sslkey", "sslrootcert", "uselibpqcompat", "ssl"]) {
+    url.searchParams.delete(key);
+  }
+  const ssl = LOOPBACK_HOSTS.has(url.hostname) ? false : { rejectUnauthorized: true };
+  const schema = process.env.DATABASE_SCHEMA;
+  const base: PoolConfig = {
+    ssl,
+    // De bridge doet weinig tegelijk; één lang lopend Node-proces op App Service.
+    max: 5,
+    idleTimeoutMillis: 30_000,
+    ...(schema ? { options: `-c search_path=${schema}` } : {}),
+  };
+
+  if (process.env.DATABASE_AUTH !== "entra") return { ...base, connectionString: url.toString() };
+
+  if (url.password) throw new Error("DATABASE_AUTH=entra vereist een DATABASE_URL zonder wachtwoord");
+  const credential = new DefaultAzureCredential();
+  return {
+    ...base,
+    host: url.hostname,
+    port: Number(url.port || 5432),
+    database: decodeURIComponent(url.pathname.slice(1)),
+    user: decodeURIComponent(url.username),
+    password: async () => {
+      const token = await credential.getToken("https://ossrdbms-aad.database.windows.net/.default");
+      if (!token) throw new Error("Geen Entra-token voor PostgreSQL ontvangen");
+      return token.token;
+    },
+  };
+}
+
+class PgStore implements Store {
+  readonly kind = "postgres" as const;
   private db: ReturnType<typeof drizzle>;
 
   constructor(url: string) {
-    this.db = drizzle(neon(url));
+    this.db = drizzle(new Pool(poolConfig(url)));
   }
 
   async createSession(s: NewSession): Promise<Session> {
@@ -109,6 +157,16 @@ class NeonStore implements Store {
     return this.db.select().from(events).orderBy(desc(events.createdAt)).limit(limit);
   }
 
+  async purgeOlderThan(cutoff: Date) {
+    const ev = await this.db.delete(events).where(lt(events.createdAt, cutoff)).returning({ id: events.id });
+    const ss = await this.db
+      .update(sessions)
+      .set({ customerName: null, customerEmail: null })
+      .where(and(eq(sessions.status, "closed"), lt(sessions.updatedAt, cutoff), isNotNull(sessions.customerEmail)))
+      .returning({ id: sessions.id });
+    return { events: ev.length, sessions: ss.length };
+  }
+
   async reset() {
     // Alleen bedoeld voor testdata: verwijdert gesloten sessies ouder dan nu.
     await this.db.delete(events);
@@ -119,8 +177,8 @@ class NeonStore implements Store {
 /* ---------------------------------------------------------------- Memory */
 
 /**
- * Fallback zodat het project meteen draait zonder Neon.
- * LET OP: per serverless-invocatie leeg op Vercel — alleen voor lokale dev.
+ * Fallback zodat het project meteen draait zonder database.
+ * LET OP: leeg na elke herstart en niet gedeeld tussen instanties — alleen voor lokale dev.
  */
 class MemoryStore implements Store {
   readonly kind = "memory" as const;
@@ -202,6 +260,20 @@ class MemoryStore implements Store {
   async listEvents(limit = 200) {
     return this.events.slice(0, limit);
   }
+  async purgeOlderThan(cutoff: Date) {
+    const before = this.events.length;
+    this.events = this.events.filter((e) => e.createdAt >= cutoff);
+    let n = 0;
+    for (const s of this.sessions) {
+      if (s.status === "closed" && s.updatedAt < cutoff && s.customerEmail) {
+        s.customerName = null;
+        s.customerEmail = null;
+        n++;
+      }
+    }
+    return { events: before - this.events.length, sessions: n };
+  }
+
   async reset() {
     this.sessions = [];
     this.events = [];
@@ -219,6 +291,6 @@ declare global {
 
 export const store: Store =
   globalThis.__bridgeStore ??
-  (globalThis.__bridgeStore = config.databaseUrl ? new NeonStore(config.databaseUrl) : new MemoryStore());
+  (globalThis.__bridgeStore = config.databaseUrl ? new PgStore(config.databaseUrl) : new MemoryStore());
 
 export * from "./schema";

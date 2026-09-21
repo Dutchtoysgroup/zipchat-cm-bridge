@@ -1,6 +1,6 @@
 /**
  * Alle configuratie op één plek. Niets hier is een secret in de code zelf —
- * alles komt uit env vars (Vercel: Project Settings > Environment Variables).
+ * alles komt uit env vars (App Service: Configuration > Application settings).
  */
 
 function opt(name: string): string | undefined {
@@ -76,7 +76,7 @@ export const config = {
   },
 
   poll: {
-    /** Hoe lang één cron-invocatie doorloopt (ms). Onder Vercel maxDuration blijven. */
+    /** Hoe lang één pollvenster doorloopt (ms). */
     windowMs: Number(opt("POLL_WINDOW_MS") ?? 50_000),
     /** Interval binnen die window (ms). */
     intervalMs: Number(opt("POLL_INTERVAL_MS") ?? 5_000),
@@ -84,9 +84,8 @@ export const config = {
     idleTimeoutMin: Number(opt("POLL_IDLE_TIMEOUT_MIN") ?? 60),
     /**
      * Laat een lopend gesprek zichzelf doorpollen in plaats van te wachten op
-     * de volgende cron. Dat is de reden dat de cron maar eens per 15 minuten
-     * hoeft te draaien — en dus dat de Neon-compute 's nachts kan slapen.
-     * Uitzetten ("false") valt terug op alleen de cron.
+     * de volgende cron (vangnet, elke 5 minuten). Uitzetten ("false") valt
+     * terug op alleen de cron.
      */
     selfChain: opt("POLL_SELF_CHAIN") !== "false",
   },

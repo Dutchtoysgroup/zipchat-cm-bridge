@@ -13,7 +13,7 @@ inclusief naam, e-mailadres en de volledige gespreksgeschiedenis.
 ## Variabelen
 | Naam | Waarde |
 |---|---|
-| `MSC_BRIDGE_URL` | De publieke URL van de bridge, bijv. `https://zipchat-cm-bridge.vercel.app/api/zipchat/escalate` |
+| `MSC_BRIDGE_URL` | De publieke URL van de bridge, bijv. `https://dtg-zipchat-cm-bridge-weu.azurewebsites.net/api/zipchat/escalate` |
 | `MSC_BRIDGE_SECRET` | Dezelfde waarde als `BRIDGE_SHARED_SECRET` in de bridge |
 
 ## Prompt (instructions)

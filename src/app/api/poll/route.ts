@@ -6,22 +6,21 @@ import { store } from "@/db";
 import { kickPoll, originOf } from "@/lib/pollChain";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
 
 const LEASE_KEY = "poll_lease";
 
 /**
  * Zipchat heeft geen webhook, dus halen we nieuwe klantberichten op.
  *
- * Kostenmodel: elke databasequery wekt de Neon-compute, die daarna nog minuten
- * wakker blijft. Daarom doet deze route in rust precies één query en stopt dan.
- * Loopt er wél een gesprek, dan pollt hij door met een interval van 5s en roept
- * hij zichzelf aan het eind van het venster opnieuw aan, zodat de cron (die
- * alleen als vangnet dient) zelden hoeft te draaien.
+ * In rust doet deze route één query en stopt. Loopt er wél een gesprek, dan
+ * pollt hij door met een interval van 5s en roept hij zichzelf aan het eind van
+ * het venster opnieuw aan; de cron is alleen een vangnet.
  */
 export async function GET(req: Request) {
   const auth = checkCron(req);
   if (!auth.ok) return NextResponse.json({ ok: false, error: "Niet geautoriseerd" }, { status: 401 });
+
+  await enforceRetention();
 
   // Eén goedkope query: valt er niets te doen, dan is dit het hele bezoek.
   const pollable = await countPollable();
@@ -85,6 +84,38 @@ async function runWindow() {
     });
   }
   return { ...totals, durationMs: Date.now() - started };
+}
+
+const RETENTION_KEY = "retention_last_run";
+const RETENTION_DAYS = 90;
+
+/**
+ * Bewaartermijn van 90 dagen, afgesproken voor het centrale dataplatform:
+ * events weg, naam en e-mail van gesloten sessies leeg. Draait hooguit één keer
+ * per dag, meeliftend op de cron, zodat er geen aparte job voor nodig is.
+ */
+async function enforceRetention() {
+  const last = Number(await store.getSetting(RETENTION_KEY));
+  if (Number.isFinite(last) && Date.now() - last < 24 * 3600_000) return;
+  await store.setSetting(RETENTION_KEY, String(Date.now()));
+  try {
+    const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 3600_000);
+    const r = await store.purgeOlderThan(cutoff);
+    if (r.events || r.sessions) {
+      await store.logEvent({
+        direction: "internal",
+        kind: "retention.purged",
+        summary: `${r.events} events verwijderd, ${r.sessions} sessies geanonimiseerd (ouder dan ${RETENTION_DAYS} dagen)`,
+      });
+    }
+  } catch (err) {
+    await store.logEvent({
+      direction: "internal",
+      kind: "retention.failed",
+      ok: false,
+      summary: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 function parseLease(raw: string | null): { token: string; until: number } | null {

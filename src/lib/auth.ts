@@ -47,7 +47,7 @@ export function checkCmWebhookSecret(req: Request) {
   return checkSecret(req, config.cm.webhookSecret, "x-bridge-token");
 }
 
-/** Vercel Cron stuurt een Authorization: Bearer <CRON_SECRET>. */
+/** De cron (Logic App) stuurt een Authorization: Bearer <CRON_SECRET>. */
 export function checkCron(req: Request) {
   const expected = process.env.CRON_SECRET || config.bridgeSecret;
   return checkSecret(req, expected, "x-bridge-secret");

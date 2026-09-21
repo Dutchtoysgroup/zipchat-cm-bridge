@@ -1,11 +1,34 @@
 # Zipchat ↔ CM Mobile Service Cloud bridge
 
-**Repo:** https://github.com/Dutchtoysgroup/zipchat-cm-bridge (privé) — elke push
-naar `main` deployt automatisch naar productie.
+**Repo:** https://github.com/Dutchtoysgroup/zipchat-cm-bridge — elke push naar
+`main` deployt via GitHub Actions (`.github/workflows/deploy-azure.yml`) naar
+productie.
 
-**Live:** https://zipchat-cm-bridge.vercel.app — het dashboard zit achter Basic
-auth (gebruiker `exit`; wachtwoord staat in `.secrets-generated.txt`, en in
-Vercel als `DASHBOARD_PASSWORD`).
+**Live:** https://dtg-zipchat-cm-bridge-weu.azurewebsites.net — het dashboard zit
+achter Basic auth (gebruiker `exit`; wachtwoord staat in `.secrets-generated.txt`,
+en in de App Service als `DASHBOARD_PASSWORD`).
+
+## Waar het draait
+
+Sinds 21 september 2026 op Azure; daarvoor Vercel + Neon.
+
+| Wat | Waar |
+|---|---|
+| App Service | `dtg-zipchat-cm-bridge-weu` in `Workflow-n8n-RG`, op het plan `asp-n8n-dtg` (gedeeld met n8n), Node 24, start met `node server.js` |
+| Database | centraal DTG-dataplatform: `dtg-data-platform-pg` → `dtg_data`, schema **`app_zipchat_bridge`** |
+| Database-auth | managed identity van de App Service (`DATABASE_AUTH=entra`); er bestaat geen wachtwoord |
+| Netwerk | de database is alleen privé bereikbaar; de App Service komt erbij via VNet-integratie op `vnet-dtg-data-platform-prd/snet-app-integration` |
+| Cron (vangnet) | Logic App `cron-zipchat-bridge-poll` in `Workflow-n8n-RG`, elke 5 minuten `GET /api/poll` |
+| Env vars | App Service → Configuration → Application settings |
+
+**Schemawijzigingen gaan via de repo `dtg-data-platform`** (migraties V017/V018
+maakten rol en schema aan), niet met `npm run db:push`: die zou de tabellen in
+`public` zetten en is tegen de centrale server geblokkeerd in `drizzle.config.ts`.
+Vanaf een laptop kun je niet bij de database; lezen doe je via het dashboard.
+
+**Bewaartermijn 90 dagen.** De bridge bewaart klantnamen, e-mailadressen en
+gespreksinhoud. `/api/poll` ruimt eens per dag op: events ouder dan 90 dagen
+weg, naam en e-mail van sessies die al 90 dagen dicht zijn leeg.
 
 Koppelt de Zipchat AI-assistent op de webshop aan **Mobile Service Cloud** van
 CM.com, via de **Conversational Router** (de "Twoway router"). Als de AI er niet
@@ -41,29 +64,24 @@ Zipchat geen webhook aanbiedt. Eén invocatie pollt ~50 seconden door met een
 interval van 5 seconden, en start daarna zichzelf opnieuw zolang er een gesprek
 open staat. Draait er niets, dan doet `/api/poll` één query en stopt meteen.
 
-### Waarom de cron maar elke 15 minuten draait
-
-Neon rekent per compute-uur, en élke query wekt de compute — die daarna nog
-minuten wakker blijft. Een cron per minuut betekende dus 24/7 een draaiende
-database, ook 's nachts zonder één gesprek; dat was verreweg de grootste post op
-de rekening. Daarom:
+### Pollketting en vangnet
 
 * De pollketting wordt gestart door de gebeurtenis zelf: een escalatie
   (`/api/zipchat/escalate`) en een agentantwoord (`/api/cm/webhook`) trappen
   `/api/poll` af, en elk venster start het volgende zolang er sessies open zijn.
   De latency tijdens een gesprek blijft daarmee ~5 seconden.
-* De cron in `vercel.json` is nog slechts een **vangnet** (elke 15 minuten) voor
-  het geval de ketting breekt door een deploy of een fout.
+* De cron (Logic App, elke 5 minuten) is alleen een **vangnet** voor het geval
+  de ketting breekt door een deploy of een fout.
 * Een tweede venster kan niet naast een lopende ketting starten: `/api/poll`
   neemt een lease (`bridge_settings.poll_lease`) en gaat anders meteen weg.
-* Het dashboard ververst elke 15 seconden in plaats van elke 3, en stopt zodra
-  het tabblad naar de achtergrond gaat — een openstaand tabblad hield de
-  database anders in zijn eentje de hele dag wakker.
+* Het dashboard ververst elke 15 seconden en stopt zodra het tabblad naar de
+  achtergrond gaat.
+* De zelfaanroep gaat naar `BRIDGE_PUBLIC_URL`: achter App Service begint
+  `req.url` met `http://`, en een omleiding naar https zou de
+  Authorization-header kwijtraken.
 
-Zet in Neon de **scale-to-zero op 1 minuut** (in plaats van de standaard 5) om
-het effect compleet te maken: dan kost een vangnet-cron nog ~1 minuut compute in
-plaats van 5. `POLL_SELF_CHAIN=false` zet de ketting uit en valt terug op alleen
-de cron — verhoog dan ook weer de cronfrequentie.
+`POLL_SELF_CHAIN=false` zet de ketting uit en valt terug op alleen de cron —
+verhoog dan de frequentie van de Logic App.
 
 ## Aan de praat krijgen
 
@@ -78,9 +96,9 @@ testknoppen werken, maar er gaat niets echt naar CM of Zipchat. Zodra
 `ZIPCHAT_API_TOKEN` en `CM_PRODUCT_TOKEN` gevuld zijn, schakelt hij naar live.
 Forceren kan met `BRIDGE_MOCK_MODE`.
 
-Zonder `DATABASE_URL` gebruikt de bridge in-memory opslag. Dat is prima lokaal,
-maar **niet op Vercel** — daar is elke invocatie een schone lei. Voor productie
-dus een Neon-database aanmaken en `npm run db:push` draaien.
+Zonder `DATABASE_URL` gebruikt de bridge in-memory opslag. Dat is prima lokaal.
+Wil je lokaal een echte database, zet dan `DATABASE_URL` op een eigen Postgres
+(bijv. `postgresql://localhost:5432/zipchat`) en draai `npm run db:push`.
 
 ## Endpoints
 
@@ -90,7 +108,7 @@ dus een Neon-database aanmaken en `npm run db:push` draaien.
 | `POST /api/cm/webhook` | de Conversational Router | agent-antwoord bezorgen |
 | `POST /api/cm/handover` | de Conversational Router | handover-status bijwerken |
 | `POST /api/cm/event` | de Conversational Router | router-events, sluit de sessie bij RouterSessionEnded |
-| `GET /api/poll` | Vercel Cron | klantberichten doorsturen |
+| `GET /api/poll` | Logic App + pollketting | klantberichten doorsturen, dagelijkse opschoning |
 | `GET /api/health` | dashboard | configuratie- en statuscheck |
 | `GET /api/sessions` · `GET /api/events` | dashboard | data |
 | `POST /api/test` | dashboard | testknoppen |
@@ -99,8 +117,8 @@ Beveiliging in twee lagen:
 
 - **Machine-endpoints** (`/api/cm/*`, `/api/zipchat/*`, `/api/poll`) staan open
   voor het internet, maar verwachten een gedeeld geheim in een header:
-  `X-Bridge-Secret` voor Zipchat, `X-Bridge-Token` voor CM, en het Vercel
-  `CRON_SECRET` voor de poller. Die geheimen verzin je zelf — je krijgt ze niet
+  `X-Bridge-Secret` voor Zipchat, `X-Bridge-Token` voor CM, en `CRON_SECRET`
+  (als `Authorization: Bearer`) voor de poller. Die geheimen verzin je zelf — je krijgt ze niet
   van CM of Zipchat; je genereert een willekeurige string en zet dezelfde waarde
   aan beide kanten neer.
 - **Het dashboard en zijn data-endpoints** zitten achter Basic auth
@@ -111,7 +129,7 @@ Beveiliging in twee lagen:
 Ontbreekt een geheim in de omgeving, dan laat de bridge door en waarschuwt het
 dashboard erover — handig lokaal, niet de bedoeling in productie.
 
-De database draait bewust in **Frankfurt (eu-central-1)**: er staan
+De database draait in **West Europe** (centraal dataplatform): er staan
 persoonsgegevens van EU-klanten in.
 
 ## Wat er aan de CM-kant moet gebeuren
@@ -154,7 +172,7 @@ Endpoint niet. Daar is de URL de enige plek waar een geheim kwijt kan, dus
 accepteert de bridge op alle CM-endpoints ook een `?token=`-parameter. De
 header blijft de voorkeur en wordt als eerste gecontroleerd.
 
-Het geheim komt zo wel in de request-logs van Vercel terecht. Dat is hier
+Het geheim komt zo wel in de request-logs van de App Service terecht. Dat is hier
 aanvaardbaar: wie die logs kan lezen, kan ook de environment variables lezen.
 
 ### Over de body van het Hand Over Endpoint

@@ -123,7 +123,8 @@ export const config = {
 
   /**
    * Microsoft Graph, voor mail uit een eigen M365-mailbox. Dezelfde
-   * app-registratie als het dataplatform ("Marketing Dashboard", Mail.Send).
+   * app-registratie als het dataplatform ("Marketing Dashboard"); het
+   * verzendrecht is in Exchange alleen voor marketing@ toegekend.
    */
   graph: {
     tenantId: opt("MS_GRAPH_TENANT_ID"),

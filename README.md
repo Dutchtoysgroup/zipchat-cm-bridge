@@ -247,8 +247,10 @@ De AI blijft in het gesprek; er wordt niets gepauzeerd en er komt geen sessie in
 het dashboard, alleen events (`marketing.*`) in het logboek.
 
 Verzending loopt via Microsoft Graph, met dezelfde app-registratie als het
-dataplatform-dashboard ("Marketing Dashboard", Mail.Send), vanuit de mailbox in
-`MS_GRAPH_SENDER`. De vier `MS_GRAPH_*`-waarden staan als platte app settings op
+dataplatform-dashboard ("Marketing Dashboard"), vanuit de mailbox in
+`MS_GRAPH_SENDER`. Die app heeft in Entra géén Graph-rollen; het verzendrecht is
+in Exchange alleen voor **marketing@** toegekend. Een andere afzender (getest:
+`automation@`) geeft `403 ErrorAccessDenied`. De vier `MS_GRAPH_*`-waarden staan als platte app settings op
 zowel `dtg-data-platform-dashboard-weu` als deze App Service: **roteer je het
 client secret, werk het dan op beide plekken bij.**
 

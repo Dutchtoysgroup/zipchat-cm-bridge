@@ -615,23 +615,32 @@ function kaal(v: string): string {
   return v.replace(/_/g, " ").replace(/\s+/g, " ").trim().replace(/^[.,:;!*\s]+|[.,:;!*\s]+$/g, "").toLowerCase();
 }
 
-export function valideerKlantgegevens(name?: string | null, email?: string | null): string | null {
+/**
+ * Zijn naam en e-mailadres bruikbaar? Gedeeld door de klantenservice-escalatie
+ * en de marketingdoorzetting; alleen de tekst richting de assistent verschilt.
+ * Een naam telt ook als de klant hem expliciet weigerde ("NAAM NIET OPGEGEVEN").
+ */
+export function controleerContact(name?: string | null, email?: string | null): { naamOk: boolean; mailOk: boolean } {
   const n = (name ?? "").trim();
   const e = (email ?? "").trim();
   const nk = kaal(n);
   const ek = kaal(e);
 
   const naamOk =
-    nk.length >= 2 && !PLACEHOLDERS.has(nk) && !n.includes("@") && !/^\d+$/.test(nk.replace(/ /g, ""));
-  const naamMarker = nk === NAAM_MARKER;
+    (nk.length >= 2 && !PLACEHOLDERS.has(nk) && !n.includes("@") && !/^\d+$/.test(nk.replace(/ /g, ""))) ||
+    nk === NAAM_MARKER;
   const mailOk =
     /^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(e) && !PLACEHOLDERS.has(ek) && !isNepAdres(e);
+  return { naamOk, mailOk };
+}
 
-  if ((naamOk || naamMarker) && mailOk) return null;
+export function valideerKlantgegevens(name?: string | null, email?: string | null): string | null {
+  const { naamOk, mailOk } = controleerContact(name, email);
+  if (naamOk && mailOk) return null;
 
   const mist: string[] = [];
   if (!mailOk) mist.push("een geldig e-mailadres");
-  if (!naamOk && !naamMarker) mist.push("de naam van de klant");
+  if (!naamOk) mist.push("de naam van de klant");
   return (
     `Nog niet doorgezet. Ontbrekend of ongeldig: ${mist.join(" en ")}. ` +
     "Zeg tegen de klant NIET dat hij is doorverbonden. Vraag het ontbrekende gegeven " +

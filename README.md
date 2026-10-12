@@ -105,6 +105,7 @@ Wil je lokaal een echte database, zet dan `DATABASE_URL` op een eigen Postgres
 | Endpoint | Wie roept aan | Doel |
 |---|---|---|
 | `POST /api/zipchat/escalate` | de Zipchat custom tool | escalatie starten |
+| `POST /api/zipchat/marketing` | Zipchat-tool op de social-media-agent | samenwerkingsaanvraag mailen naar marketing |
 | `POST /api/cm/webhook` | de Conversational Router | agent-antwoord bezorgen |
 | `POST /api/cm/handover` | de Conversational Router | handover-status bijwerken |
 | `POST /api/cm/event` | de Conversational Router | router-events, sluit de sessie bij RouterSessionEnded |
@@ -225,6 +226,35 @@ documentatie staat, maar wel werkt:
 curl -s "https://app.zipchat.ai/api/integrations/backend_api/v1/chats/<chat_id>/users" \
   -H "Authorization: Bearer $ZIPCHAT_API_TOKEN"
 ```
+
+## Samenwerkingsaanvragen naar marketing
+
+De social-media-agent (Zipchat-chat `21984`, exittoys.nl, o.a. Instagram) zet
+influencer-, samenwerkings-, pers- en sponsoraanvragen door met de tool in
+[`zipchat-tool/influencer-doorzetten.md`](zipchat-tool/influencer-doorzetten.md).
+De masterprompt van die agent staat in
+[`zipchat-tool/master-prompt-social-nl.md`](zipchat-tool/master-prompt-social-nl.md).
+
+Dit gaat bewust **niet** via CM of Robin: dat is de klantenservice. De tool roept
+`POST /api/zipchat/marketing` aan, en de bridge:
+
+1. controleert naam en e-mailadres (zelfde regels als bij de escalatie);
+2. haalt het gesprek op bij Zipchat, zodat marketing leest wat de persoon zelf schreef;
+3. mailt alles naar `MARKETING_EMAIL_TO` (standaard `marketing@dutchtoysgroup.com`),
+   met reply-to op het adres van de persoon, zodat "Beantwoorden" meteen goed gaat.
+
+De AI blijft in het gesprek; er wordt niets gepauzeerd en er komt geen sessie in
+het dashboard, alleen events (`marketing.*`) in het logboek.
+
+Verzending loopt via Microsoft Graph, met dezelfde app-registratie als het
+dataplatform-dashboard ("Marketing Dashboard", Mail.Send), vanuit de mailbox in
+`MS_GRAPH_SENDER`. De vier `MS_GRAPH_*`-waarden staan als platte app settings op
+zowel `dtg-data-platform-dashboard-weu` als deze App Service: **roteer je het
+client secret, werk het dan op beide plekken bij.**
+
+Op de Zipchat-kant heeft de tool twee variabelen: `MARKETING_BRIDGE_URL`
+(`https://<deploy>/api/zipchat/marketing`) en `MARKETING_BRIDGE_SECRET` (dezelfde
+waarde als `BRIDGE_SHARED_SECRET`).
 
 ## Tegen de live router uitgezocht
 

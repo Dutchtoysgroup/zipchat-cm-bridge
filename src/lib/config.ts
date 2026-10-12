@@ -121,6 +121,29 @@ export const config = {
     },
   },
 
+  /**
+   * Microsoft Graph, voor mail uit een eigen M365-mailbox. Dezelfde
+   * app-registratie als het dataplatform ("Marketing Dashboard", Mail.Send).
+   */
+  graph: {
+    tenantId: opt("MS_GRAPH_TENANT_ID"),
+    clientId: opt("MS_GRAPH_CLIENT_ID"),
+    clientSecret: opt("MS_GRAPH_CLIENT_SECRET"),
+    /** De mailbox waaruit verstuurd wordt. */
+    sender: opt("MS_GRAPH_SENDER"),
+    get configured(): boolean {
+      return !!this.tenantId && !!this.clientId && !!this.clientSecret && !!this.sender;
+    },
+  },
+
+  /**
+   * Influencer- en samenwerkingsaanvragen. Die gaan bewust niet via CM/Robin
+   * (dat is de klantenservice), maar per mail rechtstreeks naar marketing.
+   */
+  marketing: {
+    to: opt("MARKETING_EMAIL_TO") ?? "marketing@dutchtoysgroup.com",
+  },
+
   databaseUrl: opt("DATABASE_URL"),
 } as const;
 

@@ -30,6 +30,12 @@ export async function GET() {
     );
   }
 
+  if (!config.graph.configured) {
+    warnings.push(
+      `MS_GRAPH_* niet volledig ingesteld — samenwerkingsaanvragen bereiken ${config.marketing.to} NIET.`,
+    );
+  }
+
   const lastWebhook = events.find((e) => e.direction === "cm->bridge");
   const lastPoll = events.find((e) => e.kind.startsWith("poll."));
 
@@ -39,6 +45,7 @@ export async function GET() {
     mockZipchat: config.mockZipchat,
     mockCm: config.mockCm,
     mail: { to: config.mail.to ?? null, configured: config.mail.configured },
+    marketingMail: { to: config.marketing.to, configured: config.graph.configured },
     storage: store.kind,
     openSessions: open.length,
     missing,

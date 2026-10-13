@@ -176,6 +176,11 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   const clientId = `zipchat:${conversationId}`;
   const cmChat = cm.buildChat({ conversationClientId: clientId, clientName: name, channel: mapChannel(channel) });
 
+  // Alles tot en met het laatste bericht van dit transcript gaat in het ticket
+  // mee; de poller begint daarna. Op Zipchats eigen klok en id's, niet op de
+  // onze: die lopen niet gelijk.
+  const lastInTicket = latestMessage(messages);
+
   const session = await store.createSession({
     zipchatChatId: chatId,
     zipchatConversationId: conversationId,
@@ -187,8 +192,9 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     mode,
     status: "escalating",
     reason: input.reason ?? null,
-    lastForwardedAt: new Date(),
+    lastForwardedAt: lastInTicket.at ?? new Date(),
   });
+  if (lastInTicket.id !== null) await store.setForwardCursor(session.id, lastInTicket.id);
 
   await store.logEvent({
     sessionId: session.id,
@@ -465,12 +471,30 @@ export async function countPollable(): Promise<number> {
   return (await pollableSessions()).length;
 }
 
+/**
+ * Een haperende router bestoken we niet elke ronde: per sessie wachten we
+ * steeds langer, tot vijf minuten. Dit staat alleen in het geheugen. Na een
+ * herstart begint het opnieuw, en dat kost hooguit een poging te veel, nooit
+ * een bericht: wat nog niet bij CM ligt, staat nog gewoon in Zipchat.
+ */
+const backoff = new Map<number, { failures: number; nextAt: number }>();
+const MAX_BACKOFF_MS = 5 * 60_000;
+
+/**
+ * Zipchat is zelf de wachtrij: wat nog niet bij CM ligt, halen we de volgende
+ * ronde gewoon opnieuw op. Cursor en watermerk schuiven daarom pas op ná een
+ * bevestigde aflevering, en alleen tot het bericht dat afgeleverd is. Lukt
+ * een bericht niet, dan wacht alles erachter, zodat de volgorde bij CM klopt.
+ */
 export async function pollOnce(): Promise<{ checked: number; forwarded: number; closed: number }> {
   const open = await pollableSessions();
   let forwarded = 0;
   let closed = 0;
 
   for (const session of open) {
+    // Wacht deze sessie nog op een nieuwe poging? Dan niets doen, ook niet sluiten.
+    if ((backoff.get(session.id)?.nextAt ?? 0) > Date.now()) continue;
+
     const sinceIso = (session.lastForwardedAt ?? session.createdAt).toISOString();
     const conv = await zipchat.getConversation(session.zipchatConversationId, {
       chatId: session.zipchatChatId,
@@ -492,16 +516,23 @@ export async function pollOnce(): Promise<{ checked: number; forwarded: number; 
       });
       if (gone) {
         await store.updateSession(session.id, { status: "closed" });
+        backoff.delete(session.id);
         closed++;
       }
       continue;
     }
 
-    const fresh = (conv.data?.messages ?? []).filter(
-      (m) => m.role === "user" && !m.manual_reply && isAfter(m.created_at, sinceIso),
-    );
+    // Zipchat filtert inclusief en kent alleen hele seconden, dus het laatst
+    // doorgestuurde bericht en zijn buren uit dezelfde seconde komen terug.
+    // De cursor (bericht-id) bepaalt wat er nog niet bij CM ligt.
+    const cursor = await store.getForwardCursor(session.id);
+    const pending = (conv.data?.messages ?? [])
+      .filter((m) => m.role === "user" && !m.manual_reply && isPending(m, cursor, sinceIso))
+      .sort(byMessageId);
 
-    for (const m of fresh) {
+    let stuck = false;
+    for (const m of pending) {
+      const text = zipchat.messageText(m);
       const res = await cm.sendToRouter({
         chat: cm.buildChat({
           conversationClientId: session.cmConversationClientId ?? `zipchat:${session.zipchatConversationId}`,
@@ -509,26 +540,56 @@ export async function pollOnce(): Promise<{ checked: number; forwarded: number; 
           channel: mapChannel(session.channel as Channel),
           chatId: session.cmChatId ?? undefined,
         }),
-        conversationMessages: [cm.textMessage(zipchat.messageText(m), "ClientOriginated")],
+        conversationMessages: [cm.textMessage(text, "ClientOriginated")],
       });
-      await store.logEvent({
-        sessionId: session.id,
-        direction: "bridge->cm",
-        kind: "poll.forwarded",
-        ok: res.ok,
-        statusCode: res.status,
-        summary: res.ok ? `Klantbericht doorgestuurd: "${truncate(zipchat.messageText(m))}"` : `Doorsturen mislukt: ${res.error}`,
-      });
-      if (res.ok) forwarded++;
-    }
 
-    const patch: Record<string, unknown> = {};
-    if (fresh.length > 0) patch.lastForwardedAt = new Date();
+      if (res.ok) {
+        forwarded++;
+        await store.logEvent({
+          sessionId: session.id,
+          direction: "bridge->cm",
+          kind: "poll.forwarded",
+          statusCode: res.status,
+          summary: `Klantbericht doorgestuurd: "${truncate(text)}"`,
+          payload: { messageId: m.id },
+        });
+      } else {
+        const reason = giveUpReason(m, res.status);
+        if (!reason) {
+          const failures = (backoff.get(session.id)?.failures ?? 0) + 1;
+          const delay = Math.min(config.poll.intervalMs * 2 ** (failures - 1), MAX_BACKOFF_MS);
+          backoff.set(session.id, { failures, nextAt: Date.now() + delay });
+          await store.logEvent({
+            sessionId: session.id,
+            direction: "bridge->cm",
+            kind: "poll.forwarded",
+            ok: false,
+            statusCode: res.status,
+            summary: `Doorsturen mislukt (poging ${failures}, opnieuw over ${Math.ceil(delay / 1000)}s): ${res.error}`,
+            payload: { messageId: m.id },
+          });
+          stuck = true;
+          break;
+        }
+        await store.logEvent({
+          sessionId: session.id,
+          direction: "bridge->cm",
+          kind: "poll.dropped",
+          ok: false,
+          statusCode: res.status,
+          summary: `Klantbericht NIET bij CM aangekomen, opgegeven (${reason}): "${truncate(text)}"`,
+          payload: { messageId: m.id, text },
+        });
+      }
+
+      await markHandled(session.id, m);
+    }
+    if (!stuck) backoff.delete(session.id);
 
     // Stille sessies netjes afsluiten.
     const idleMs = Date.now() - new Date(session.updatedAt).getTime();
-    if (fresh.length === 0 && idleMs > config.poll.idleTimeoutMin * 60_000) {
-      patch.status = "closed";
+    if (pending.length === 0 && idleMs > config.poll.idleTimeoutMin * 60_000) {
+      await store.updateSession(session.id, { status: "closed" });
       closed++;
       await store.logEvent({
         sessionId: session.id,
@@ -537,10 +598,40 @@ export async function pollOnce(): Promise<{ checked: number; forwarded: number; 
         summary: `Automatisch gesloten na ${config.poll.idleTimeoutMin} min stilte`,
       });
     }
-    if (Object.keys(patch).length > 0) await store.updateSession(session.id, patch);
   }
 
   return { checked: open.length, forwarded, closed };
+}
+
+/** Nog niet bij CM? Op id als we die hebben; alleen op tijd voor sessies van vóór de cursor. */
+function isPending(m: zipchat.ZipchatMessage, cursor: number | null, sinceIso: string): boolean {
+  const id = messageId(m);
+  if (cursor !== null && id !== null) return id > cursor;
+  return isAfter(m.created_at, sinceIso);
+}
+
+/**
+ * Wanneer opnieuw proberen geen zin meer heeft. Een 400, 413 of 422 gaat over
+ * dít bericht en wordt bij herhaling niet anders; wachten zou alles erachter
+ * ophouden. Al het andere (time-out, 429, 5xx, ook 401/403 van een verlopen
+ * token) is tijdelijk, tot het bericht ouder is dan de stilte waarna een
+ * sessie toch al dichtgaat.
+ */
+function giveUpReason(m: zipchat.ZipchatMessage, status: number): string | null {
+  if (status === 400 || status === 413 || status === 422) return `CM weigert het, HTTP ${status}`;
+  const at = parseAt(m.created_at);
+  if (at && Date.now() - at.getTime() > config.poll.idleTimeoutMin * 60_000) {
+    return `na ${config.poll.idleTimeoutMin} min nog steeds niet gelukt`;
+  }
+  return null;
+}
+
+/** Cursor en watermerk tot en met dit bericht opschuiven. */
+async function markHandled(sessionId: number, m: zipchat.ZipchatMessage): Promise<void> {
+  const id = messageId(m);
+  if (id !== null) await store.setForwardCursor(sessionId, id);
+  const at = parseAt(m.created_at);
+  if (at) await store.updateSession(sessionId, { lastForwardedAt: at });
 }
 
 /* ---------------------------------------------------------------- Afsluiten */
@@ -698,6 +789,38 @@ function mapChannel(c: Channel): string {
 function isAfter(iso: string | undefined, sinceIso: string): boolean {
   if (!iso) return true;
   return new Date(iso).getTime() > new Date(sinceIso).getTime();
+}
+
+function parseAt(iso: string | undefined): Date | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Zipchat-id's zijn oplopende gehele getallen (nagegaan op 13 okt 2026). */
+function messageId(m: zipchat.ZipchatMessage): number | null {
+  const n = typeof m.id === "number" ? m.id : typeof m.id === "string" && m.id.trim() ? Number(m.id) : NaN;
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+/** Oplopend op id, zodat stoppen bij de eerste fout ook echt de volgorde bewaart. */
+function byMessageId(a: zipchat.ZipchatMessage, b: zipchat.ZipchatMessage): number {
+  const x = messageId(a);
+  const y = messageId(b);
+  return x !== null && y !== null ? x - y : 0;
+}
+
+/** Hoogste id en laatste tijdstempel van een transcript. */
+function latestMessage(messages: zipchat.ZipchatMessage[]): { id: number | null; at: Date | null } {
+  let id: number | null = null;
+  let at: Date | null = null;
+  for (const m of messages) {
+    const i = messageId(m);
+    if (i !== null && (id === null || i > id)) id = i;
+    const t = parseAt(m.created_at);
+    if (t && (!at || t > at)) at = t;
+  }
+  return { id, at };
 }
 
 function truncate(s: string, n = 80): string {

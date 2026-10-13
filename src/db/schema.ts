@@ -22,7 +22,11 @@ export const sessions = pgTable(
     handoverState: text("handover_state"),
     /** Naam van de medewerker die het gesprek oppakte, als CM die meestuurt. */
     agentName: text("agent_name"),
-    /** Watermerk: laatste bericht dat we al naar CM hebben doorgezet. */
+    /**
+     * Watermerk: Zipchat-tijd van het laatste bericht dat al bij CM ligt. Alleen
+     * de ondergrens voor het ophalen; wat nieuw is, bepaalt de cursor op
+     * bericht-id (Store.getForwardCursor).
+     */
     lastForwardedAt: timestamp("last_forwarded_at", { withTimezone: true }),
     lastAgentReplyAt: timestamp("last_agent_reply_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

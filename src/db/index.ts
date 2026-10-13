@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool, type PoolConfig } from "pg";
 import { DefaultAzureCredential } from "@azure/identity";
-import { and, desc, eq, inArray, isNotNull, lt } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, like, lt } from "drizzle-orm";
 import { config } from "@/lib/config";
 import { sessions, events, settings, type Session, type NewSession, type BridgeEvent } from "./schema";
 
@@ -26,11 +26,31 @@ export interface Store {
   listOpenSessions(): Promise<Session[]>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
+  /**
+   * Id van het laatste Zipchat-bericht van deze sessie dat al bij CM ligt: in
+   * het openingsticket of los doorgestuurd. De poller stuurt alleen wat erna
+   * komt. Zipchat-id's lopen op; de tijdstempels hebben maar secondeprecisie,
+   * dus alleen daarop sturen laat berichten uit dezelfde seconde vallen.
+   */
+  getForwardCursor(sessionId: number): Promise<number | null>;
+  setForwardCursor(sessionId: number, messageId: number): Promise<void>;
   logEvent(e: EventInput): Promise<void>;
   listEvents(limit?: number): Promise<BridgeEvent[]>;
   /** Bewaartermijn: events weg, naam en e-mail van gesloten sessies leeg. */
   purgeOlderThan(cutoff: Date): Promise<{ events: number; sessions: number }>;
   reset(): Promise<void>;
+}
+
+/**
+ * De cursor staat in bridge_settings, net als de poll-lease: zo is er geen
+ * migratie op het centrale dataplatform voor nodig. Eén rij per sessie; de
+ * bewaartermijn ruimt ze op.
+ */
+const CURSOR_PREFIX = "forward_cursor:";
+
+function parseCursor(raw: string | null): number | null {
+  const n = Number(raw);
+  return raw !== null && Number.isSafeInteger(n) ? n : null;
 }
 
 /* -------------------------------------------------------------- Postgres */
@@ -141,6 +161,14 @@ class PgStore implements Store {
       .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } });
   }
 
+  async getForwardCursor(sessionId: number) {
+    return parseCursor(await this.getSetting(`${CURSOR_PREFIX}${sessionId}`));
+  }
+
+  async setForwardCursor(sessionId: number, messageId: number) {
+    await this.setSetting(`${CURSOR_PREFIX}${sessionId}`, String(messageId));
+  }
+
   async logEvent(e: EventInput) {
     await this.db.insert(events).values({
       sessionId: e.sessionId ?? null,
@@ -164,6 +192,11 @@ class PgStore implements Store {
       .set({ customerName: null, customerEmail: null })
       .where(and(eq(sessions.status, "closed"), lt(sessions.updatedAt, cutoff), isNotNull(sessions.customerEmail)))
       .returning({ id: sessions.id });
+    // Een cursor die 90 dagen niet is bijgewerkt hoort bij een sessie die al
+    // lang dicht is (die sluit na een uur stilte vanzelf).
+    await this.db
+      .delete(settings)
+      .where(and(like(settings.key, `${CURSOR_PREFIX}%`), lt(settings.updatedAt, cutoff)));
     return { events: ev.length, sessions: ss.length };
   }
 
@@ -171,6 +204,7 @@ class PgStore implements Store {
     // Alleen bedoeld voor testdata: verwijdert gesloten sessies ouder dan nu.
     await this.db.delete(events);
     await this.db.delete(sessions).where(lt(sessions.createdAt, new Date()));
+    await this.db.delete(settings).where(like(settings.key, `${CURSOR_PREFIX}%`));
   }
 }
 
@@ -243,6 +277,12 @@ class MemoryStore implements Store {
   async setSetting(key: string, value: string) {
     this.settings.set(key, value);
   }
+  async getForwardCursor(sessionId: number) {
+    return parseCursor(this.settings.get(`${CURSOR_PREFIX}${sessionId}`) ?? null);
+  }
+  async setForwardCursor(sessionId: number, messageId: number) {
+    this.settings.set(`${CURSOR_PREFIX}${sessionId}`, String(messageId));
+  }
   async logEvent(e: EventInput) {
     this.events.unshift({
       id: this.seqE++,
@@ -277,6 +317,8 @@ class MemoryStore implements Store {
   async reset() {
     this.sessions = [];
     this.events = [];
+    // Sessie-id's beginnen weer bij 1; een oude cursor zou dan bij een nieuwe sessie horen.
+    for (const key of [...this.settings.keys()]) if (key.startsWith(CURSOR_PREFIX)) this.settings.delete(key);
     this.seqS = 1;
     this.seqE = 1;
   }

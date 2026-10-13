@@ -83,6 +83,30 @@ open staat. Draait er niets, dan doet `/api/poll` één query en stopt meteen.
 `POLL_SELF_CHAIN=false` zet de ketting uit en valt terug op alleen de cron —
 verhoog dan de frequentie van de Logic App.
 
+### Geen klantbericht kwijt
+
+Zipchat is zelf de wachtrij: wat nog niet bij CM ligt, haalt de poller de
+volgende ronde gewoon opnieuw op. Daarom schuift er pas iets op ná een
+bevestigde aflevering, en alleen tot het bericht dat is afgeleverd.
+
+* **Cursor op bericht-id** (`bridge_settings.forward_cursor:<sessie>`). Zipchat
+  geeft `created_at` in hele seconden en `message_created_at_since` filtert
+  inclusief (nagegaan op 13 oktober 2026); op tijd alleen vallen twee berichten
+  uit dezelfde seconde weg. De id's lopen op, dus "id groter dan de cursor" is
+  precies wat nieuw is. Bij de escalatie staat de cursor op het laatste bericht
+  van het transcript, want dat zit al in het ticket.
+* **`last_forwarded_at`** is de Zipchat-tijd van het laatst afgeleverde bericht,
+  niet de klok van de bridge. Het is alleen nog de ondergrens voor het ophalen.
+* **Mislukt een bericht** (time-out, 429, 5xx, 401/403), dan wacht alles erachter,
+  zodat de volgorde bij CM klopt. Die sessie wordt opnieuw geprobeerd na 5 s,
+  10 s, 20 s, … tot maximaal 5 minuten tussen pogingen.
+* **Opgegeven** (`poll.dropped` in het logboek, met de tekst erbij) wordt een
+  bericht alleen als CM het weigert (400, 413, 422) of als het na
+  `POLL_IDLE_TIMEOUT_MIN` nog steeds niet gelukt is. Anders zou één onbezorgbaar
+  bericht het gesprek erachter blijvend ophouden.
+* Afleveren is *at-least-once*: geeft CM een time-out terwijl het bericht wél
+  aankwam, dan gaat het een tweede keer. Liever dubbel dan kwijt.
+
 ## Aan de praat krijgen
 
 ```bash

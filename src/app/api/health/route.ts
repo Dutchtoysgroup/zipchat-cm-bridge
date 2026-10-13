@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { config } from "@/lib/config";
+import { authDisabled } from "@/lib/authMode";
 import { store } from "@/db";
 
 export const dynamic = "force-dynamic";
@@ -19,8 +20,12 @@ export async function GET() {
   if (!config.cm.agentStateNameId) missing.push("CM_AGENT_STATE_NAME_ID");
 
   const warnings: string[] = [];
-  if (!config.bridgeSecret) warnings.push("BRIDGE_SHARED_SECRET niet gezet — /api/zipchat/escalate is onbeveiligd.");
-  if (!config.cm.webhookSecret) warnings.push("CM_WEBHOOK_SECRET niet gezet — de CM-webhook is onbeveiligd.");
+  if (authDisabled()) {
+    warnings.push("Lokale ontwikkelmodus (BRIDGE_DEV_NO_AUTH): endpoints zonder geheim staan open.");
+  } else {
+    if (!config.bridgeSecret) warnings.push("BRIDGE_SHARED_SECRET niet gezet — /api/zipchat/escalate weigert elke aanroep.");
+    if (!config.cm.webhookSecret) warnings.push("CM_WEBHOOK_SECRET niet gezet — de CM-webhook weigert elke aanroep.");
+  }
   if (store.kind === "memory") warnings.push("Geen DATABASE_URL — opslag is in-memory en verdwijnt bij herstart.");
   if (!config.mail.to) {
     warnings.push("ESCALATION_EMAIL_TO niet gezet — er gaat geen e-mail naar de klantenservice.");

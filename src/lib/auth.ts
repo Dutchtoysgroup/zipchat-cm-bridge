@@ -1,4 +1,5 @@
 import { config } from "./config";
+import { authDisabled } from "./authMode";
 
 /** Timing-veilige vergelijking van twee korte strings. */
 function safeEqual(a: string, b: string): boolean {
@@ -26,15 +27,15 @@ function presented(req: Request, header: string): string | null {
 }
 
 /**
- * Controleert een gedeeld geheim. Is er geen geheim geconfigureerd, dan laten
- * we door (handig lokaal) maar melden we dat, zodat het dashboard kan waarschuwen.
+ * Controleert een gedeeld geheim. Is er geen geheim geconfigureerd, dan blijft
+ * de deur dicht, behalve in de expliciete lokale ontwikkelmodus (authMode).
  */
 export function checkSecret(
   req: Request,
   expected: string | undefined,
   header = "x-bridge-secret",
 ): { ok: boolean; unprotected: boolean } {
-  if (!expected) return { ok: true, unprotected: true };
+  if (!expected) return { ok: authDisabled(), unprotected: true };
   const given = presented(req, header);
   return { ok: !!given && safeEqual(given, expected), unprotected: false };
 }

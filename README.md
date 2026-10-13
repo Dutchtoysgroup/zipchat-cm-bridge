@@ -123,7 +123,9 @@ npm run dev
 ```
 
 Zonder credentials start de bridge in **mock-modus**: het dashboard en alle
-testknoppen werken, maar er gaat niets echt naar CM of Zipchat. Zodra
+testknoppen werken, maar er gaat niets echt naar CM of Zipchat. Dat kan zonder
+geheimen alleen dankzij `BRIDGE_DEV_NO_AUTH=true` uit `.env.example`; zie
+[Geheimen](#geheimen). Zodra
 `ZIPCHAT_API_TOKEN` en `CM_PRODUCT_TOKEN` gevuld zijn, schakelt hij naar live.
 Forceren kan met `BRIDGE_MOCK_MODE`.
 
@@ -158,8 +160,22 @@ Beveiliging in twee lagen:
   transcripten in. CM en Zipchat kunnen geen Basic auth meesturen, vandaar de
   uitzondering hierboven.
 
-Ontbreekt een geheim in de omgeving, dan laat de bridge door en waarschuwt het
-dashboard erover — handig lokaal, niet de bedoeling in productie.
+### Geheimen
+
+Een ontbrekend geheim zet nooit iets open: het endpoint weigert dan elke
+aanroep (401), het dashboard geeft 503.
+
+* **Productie start niet** zonder `BRIDGE_SHARED_SECRET`, `CM_WEBHOOK_SECRET`
+  en `DASHBOARD_PASSWORD`, of met een van die drie (of `CRON_SECRET`, als die
+  gezet is) korter dan 16 tekens. `src/instrumentation.ts` controleert dat bij
+  het opstarten en stopt het proces met de namen in de log (App Service → Log
+  stream). Liever een bridge die niet opkomt dan een die zonder authenticatie
+  draait.
+* **Lokaal zonder geheimen** kan alleen met `BRIDGE_DEV_NO_AUTH=true` (staat in
+  `.env.example`). In een productiebuild is `NODE_ENV` altijd `production` en
+  telt die vlag niet.
+* `CRON_SECRET` mag leeg blijven; `/api/poll` valt dan terug op
+  `BRIDGE_SHARED_SECRET`.
 
 De database draait in **West Europe** (centraal dataplatform): er staan
 persoonsgegevens van EU-klanten in.

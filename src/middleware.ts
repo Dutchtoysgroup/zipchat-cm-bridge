@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { authDisabled } from "@/lib/authMode";
 
 /**
  * Het dashboard en zijn data-endpoints bevatten klantnamen, e-mailadressen en
@@ -16,8 +17,11 @@ export function middleware(req: NextRequest) {
   const user = process.env.DASHBOARD_USER ?? "exit";
   const pass = process.env.DASHBOARD_PASSWORD;
 
-  // Zonder wachtwoord (lokale dev) laten we door.
-  if (!pass) return NextResponse.next();
+  // Zonder wachtwoord alleen door in de expliciete lokale ontwikkelmodus.
+  if (!pass) {
+    if (authDisabled()) return NextResponse.next();
+    return new NextResponse("Dashboard niet ingesteld: DASHBOARD_PASSWORD ontbreekt", { status: 503 });
+  }
 
   const header = req.headers.get("authorization");
   if (header?.startsWith("Basic ")) {

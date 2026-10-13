@@ -73,7 +73,14 @@ open staat. Draait er niets, dan doet `/api/poll` één query en stopt meteen.
 * De cron (Logic App, elke 5 minuten) is alleen een **vangnet** voor het geval
   de ketting breekt door een deploy of een fout.
 * Een tweede venster kan niet naast een lopende ketting starten: `/api/poll`
-  neemt een lease (`bridge_settings.poll_lease`) en gaat anders meteen weg.
+  neemt een lease (`bridge_settings.poll_lease`) en gaat anders meteen weg
+  (`skipped: busy`). Nemen gebeurt in één statement, zodat twee aanvragen
+  tegelijk hem niet allebei krijgen. De lease geldt 30 seconden en het venster
+  verlengt hem elke 10 seconden, los van hoe lang een ronde duurt. Aan het eind
+  geeft het venster hem vrij (alleen als hij nog van hem is) en pas dán start
+  het zijn opvolger; die krijgt dus nooit `busy` van zijn voorganger. Crasht
+  een venster, dan is de lease binnen 30 seconden verlopen en pakt de cron het
+  op.
 * Het dashboard ververst elke 15 seconden en stopt zodra het tabblad naar de
   achtergrond gaat.
 * De zelfaanroep gaat naar `BRIDGE_PUBLIC_URL`: achter App Service begint

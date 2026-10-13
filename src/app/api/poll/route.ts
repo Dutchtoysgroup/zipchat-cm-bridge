@@ -8,6 +8,12 @@ import { kickPoll, originOf } from "@/lib/pollChain";
 export const dynamic = "force-dynamic";
 
 const LEASE_KEY = "poll_lease";
+/**
+ * Zo lang blijft een lease staan zonder verlenging. Een venster dat crasht
+ * blokkeert de ketting dus hooguit zo lang; daarna pakt de cron het op.
+ */
+const LEASE_TTL_MS = 30_000;
+const LEASE_RENEW_MS = 10_000;
 
 /**
  * Zipchat heeft geen webhook, dus halen we nieuwe klantberichten op.
@@ -29,13 +35,7 @@ export async function GET(req: Request) {
   // Voorkomt dat de cron een tweede venster start terwijl de ketting nog loopt;
   // twee vensters tegelijk zouden hetzelfde klantbericht dubbel doorsturen.
   const mine = Math.random().toString(36).slice(2, 10);
-  const now = Date.now();
-  const existing = parseLease(await store.getSetting(LEASE_KEY));
-  if (existing && existing.until > now && existing.token !== mine) {
-    return NextResponse.json({ ok: true, skipped: "busy", checked: 0 });
-  }
-  await store.setSetting(LEASE_KEY, `${mine}:${now + config.poll.windowMs + 10_000}`);
-  if (parseLease(await store.getSetting(LEASE_KEY))?.token !== mine) {
+  if (!(await store.acquireLease(LEASE_KEY, mine, LEASE_TTL_MS))) {
     return NextResponse.json({ ok: true, skipped: "busy", checked: 0 });
   }
 
@@ -44,23 +44,39 @@ export async function GET(req: Request) {
   // Meteen antwoorden en daarna doorpollen: zo blijft de aanroeper (cron, of het
   // vorige venster) niet 50 seconden hangen en is de ketting goedkoop.
   if (new URL(req.url).searchParams.get("sync") === "1") {
-    const totals = await runWindow();
-    if (totals.checked > 0) await kickPoll(origin);
+    const totals = await runWindow(mine);
+    if (totals.checked > 0 && !totals.leaseLost) await kickPoll(origin);
     return NextResponse.json({ ok: true, ...totals });
   }
 
   after(async () => {
-    const totals = await runWindow();
-    // Nog steeds gesprekken open? Dan zelf het volgende venster starten.
-    if (totals.checked > 0) await kickPoll(origin);
+    const totals = await runWindow(mine);
+    // Nog steeds gesprekken open? Dan zelf het volgende venster starten. De
+    // lease is dan al vrijgegeven, anders kreeg de opvolger "busy".
+    if (totals.checked > 0 && !totals.leaseLost) await kickPoll(origin);
   });
 
   return NextResponse.json({ ok: true, started: true, checked: pollable });
 }
 
-async function runWindow() {
+async function runWindow(token: string) {
   const started = Date.now();
-  const totals = { rounds: 0, checked: 0, forwarded: 0, closed: 0 };
+  const totals = { rounds: 0, checked: 0, forwarded: 0, closed: 0, leaseLost: false };
+
+  // Verlengen los van de rondes: één ronde kan zelf lang duren (tot 15 s per
+  // HTTP-aanroep), en een verlopen lease laat de cron een tweede venster
+  // starten. Mislukt een verlenging, dan probeert de volgende tik het opnieuw;
+  // de TTL geeft daar ruimte voor.
+  let renewing: Promise<void> = Promise.resolve();
+  const heartbeat = setInterval(() => {
+    renewing = store.renewLease(LEASE_KEY, token, LEASE_TTL_MS).then(
+      (ok) => {
+        if (!ok) totals.leaseLost = true;
+      },
+      () => {},
+    );
+  }, LEASE_RENEW_MS);
+
   try {
     do {
       const r = await pollOnce();
@@ -73,6 +89,8 @@ async function runWindow() {
       if (elapsed + config.poll.intervalMs >= config.poll.windowMs) break;
       // Geen open sessies? Dan is doorlopen zinloos.
       if (r.checked === 0) break;
+      // Lease kwijt: een ander venster heeft het overgenomen en pollt verder.
+      if (totals.leaseLost) break;
       await sleep(config.poll.intervalMs);
     } while (true);
   } catch (err) {
@@ -82,6 +100,25 @@ async function runWindow() {
       ok: false,
       summary: err instanceof Error ? err.message : String(err),
     });
+  } finally {
+    clearInterval(heartbeat);
+    // Een verlenging die nog onderweg is, zou na het vrijgeven niets meer
+    // vinden en de lease ten onrechte "kwijt" melden.
+    await renewing;
+    try {
+      await store.releaseLease(LEASE_KEY, token);
+    } catch (err) {
+      // Dan verloopt hij vanzelf binnen LEASE_TTL_MS; tot die tijd krijgt de
+      // opvolger "busy" en neemt de cron het over.
+      await store
+        .logEvent({
+          direction: "internal",
+          kind: "poll.lease_release_failed",
+          ok: false,
+          summary: err instanceof Error ? err.message : String(err),
+        })
+        .catch(() => {});
+    }
   }
   return { ...totals, durationMs: Date.now() - started };
 }
@@ -116,13 +153,6 @@ async function enforceRetention() {
       summary: err instanceof Error ? err.message : String(err),
     });
   }
-}
-
-function parseLease(raw: string | null): { token: string; until: number } | null {
-  if (!raw) return null;
-  const [token, until] = raw.split(":");
-  const ms = Number(until);
-  return token && Number.isFinite(ms) ? { token, until: ms } : null;
 }
 
 function sleep(ms: number) {

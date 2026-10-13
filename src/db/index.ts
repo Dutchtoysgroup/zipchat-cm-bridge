@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool, type PoolConfig } from "pg";
 import { DefaultAzureCredential } from "@azure/identity";
-import { and, desc, eq, inArray, isNotNull, like, lt } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, like, lt, sql, type SQL } from "drizzle-orm";
 import { config } from "@/lib/config";
 import { sessions, events, settings, type Session, type NewSession, type BridgeEvent } from "./schema";
 
@@ -34,6 +34,15 @@ export interface Store {
    */
   getForwardCursor(sessionId: number): Promise<number | null>;
   setForwardCursor(sessionId: number, messageId: number): Promise<void>;
+  /**
+   * Eén pollvenster tegelijk. Nemen lukt alleen als de lease vrij, verlopen of
+   * al van dit token is; dat gebeurt in één statement, zodat twee aanvragen
+   * tegelijk hem niet allebei krijgen. Verlengen en vrijgeven kan alleen de
+   * eigenaar.
+   */
+  acquireLease(key: string, token: string, ttlMs: number): Promise<boolean>;
+  renewLease(key: string, token: string, ttlMs: number): Promise<boolean>;
+  releaseLease(key: string, token: string): Promise<void>;
   logEvent(e: EventInput): Promise<void>;
   listEvents(limit?: number): Promise<BridgeEvent[]>;
   /** Bewaartermijn: events weg, naam en e-mail van gesloten sessies leeg. */
@@ -51,6 +60,23 @@ const CURSOR_PREFIX = "forward_cursor:";
 function parseCursor(raw: string | null): number | null {
   const n = Number(raw);
   return raw !== null && Number.isSafeInteger(n) ? n : null;
+}
+
+/** Een lease staat in bridge_settings als "<token>:<geldig tot, epoch-ms>". */
+function parseLease(raw: string | null): { token: string; until: number } | null {
+  if (!raw) return null;
+  const [token, until] = raw.split(":");
+  const ms = Number(until);
+  return token && Number.isFinite(ms) ? { token, until: ms } : null;
+}
+
+function leaseToken(col: typeof settings.value): SQL {
+  return sql`split_part(${col}, ':', 1)`;
+}
+
+/** Onleesbare waarde telt als verlopen, anders zou één kapotte rij het pollen blokkeren. */
+function leaseUntil(col: typeof settings.value): SQL {
+  return sql`case when split_part(${col}, ':', 2) ~ '^[0-9]+$' then split_part(${col}, ':', 2)::bigint else 0 end`;
 }
 
 /* -------------------------------------------------------------- Postgres */
@@ -169,6 +195,34 @@ class PgStore implements Store {
     await this.setSetting(`${CURSOR_PREFIX}${sessionId}`, String(messageId));
   }
 
+  async acquireLease(key: string, token: string, ttlMs: number) {
+    const now = Date.now();
+    const value = `${token}:${now + ttlMs}`;
+    const rows = await this.db
+      .insert(settings)
+      .values({ key, value })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value, updatedAt: new Date() },
+        setWhere: sql`${leaseUntil(settings.value)} < ${now} or ${leaseToken(settings.value)} = ${token}`,
+      })
+      .returning({ key: settings.key });
+    return rows.length > 0;
+  }
+
+  async renewLease(key: string, token: string, ttlMs: number) {
+    const rows = await this.db
+      .update(settings)
+      .set({ value: `${token}:${Date.now() + ttlMs}`, updatedAt: new Date() })
+      .where(and(eq(settings.key, key), sql`${leaseToken(settings.value)} = ${token}`))
+      .returning({ key: settings.key });
+    return rows.length > 0;
+  }
+
+  async releaseLease(key: string, token: string) {
+    await this.db.delete(settings).where(and(eq(settings.key, key), sql`${leaseToken(settings.value)} = ${token}`));
+  }
+
   async logEvent(e: EventInput) {
     await this.db.insert(events).values({
       sessionId: e.sessionId ?? null,
@@ -282,6 +336,21 @@ class MemoryStore implements Store {
   }
   async setForwardCursor(sessionId: number, messageId: number) {
     this.settings.set(`${CURSOR_PREFIX}${sessionId}`, String(messageId));
+  }
+  async acquireLease(key: string, token: string, ttlMs: number) {
+    const now = Date.now();
+    const cur = parseLease(this.settings.get(key) ?? null);
+    if (cur && cur.until >= now && cur.token !== token) return false;
+    this.settings.set(key, `${token}:${now + ttlMs}`);
+    return true;
+  }
+  async renewLease(key: string, token: string, ttlMs: number) {
+    if (parseLease(this.settings.get(key) ?? null)?.token !== token) return false;
+    this.settings.set(key, `${token}:${Date.now() + ttlMs}`);
+    return true;
+  }
+  async releaseLease(key: string, token: string) {
+    if (parseLease(this.settings.get(key) ?? null)?.token === token) this.settings.delete(key);
   }
   async logEvent(e: EventInput) {
     this.events.unshift({

@@ -1,0 +1,116 @@
+{
+  "_toelichting": "Landenbots die scripts/zipchat-sync.mjs beheert. FR (20749) staat hier bewust niet in: dat is de bot waar de rest op gebaseerd is en hij blijft met de hand beheerd. 'csChannels' zijn de kanalen waarop de klantenservice-skills actief zijn; 'rules' false = de prompt heeft al eigen regels en krijgt geen beheerd blok.",
+  "bots": [
+    {
+      "chatId": 21984,
+      "domain": "exittoys.nl",
+      "lang": "nl",
+      "shopUrl": "https://www.exittoys.nl",
+      "contactEmail": "info@exittoys.nl",
+      "countryName": "Nederland",
+      "zipHint": "Nederland: 4 cijfers en 2 letters (bijv. 1234 AB); België: 4 cijfers.",
+      "csChannels": ["chat"],
+      "rules": false
+    },
+    {
+      "chatId": 22036,
+      "domain": "exittoys.be",
+      "lang": "nl",
+      "shopUrl": "https://www.exittoys.be",
+      "contactEmail": "info@exittoys.nl",
+      "countryName": "België",
+      "zipHint": "België: 4 cijfers (bijv. 2000); Nederland: 4 cijfers en 2 letters.",
+      "csChannels": ["all channels"]
+    },
+    {
+      "chatId": 22057,
+      "domain": "exittoys.dk",
+      "lang": "da",
+      "shopUrl": "https://www.exittoys.dk",
+      "contactEmail": "info@exittoys.com",
+      "countryName": "Danmark",
+      "zipHint": "Danmark: 4 cifre (fx 8000).",
+      "csChannels": ["all channels"]
+    },
+    {
+      "chatId": 22059,
+      "domain": "exittoys.se",
+      "lang": "sv",
+      "shopUrl": "https://www.exittoys.se",
+      "contactEmail": "info@exittoys.com",
+      "countryName": "Sverige",
+      "zipHint": "Sverige: 5 siffror (t.ex. 123 45).",
+      "csChannels": ["all channels"]
+    },
+    {
+      "chatId": 22060,
+      "domain": "exittoys.es",
+      "lang": "es",
+      "shopUrl": "https://www.exittoys.es",
+      "contactEmail": "info@exittoys.com",
+      "countryName": "España",
+      "zipHint": "España: 5 cifras (p. ej. 28001).",
+      "csChannels": ["all channels"]
+    },
+    {
+      "chatId": 22061,
+      "domain": "exittoys.it",
+      "lang": "it",
+      "shopUrl": "https://www.exittoys.it",
+      "contactEmail": "info@exittoys.com",
+      "countryName": "Italia",
+      "zipHint": "Italia: CAP di 5 cifre (es. 20121).",
+      "csChannels": ["all channels"]
+    },
+    {
+      "chatId": 22062,
+      "domain": "exittoys.co.uk",
+      "lang": "en",
+      "shopUrl": "https://www.exittoys.co.uk",
+      "contactEmail": "info@exittoys.com",
+      "countryName": "the United Kingdom",
+      "zipHint": "UK postcode, letters and numbers (e.g. SW1A 1AA).",
+      "csChannels": ["all channels"]
+    },
+    {
+      "chatId": 22063,
+      "domain": "exittoys.ie",
+      "lang": "en",
+      "shopUrl": "https://www.exittoys.ie",
+      "contactEmail": "info@exittoys.com",
+      "countryName": "Ireland",
+      "zipHint": "Irish Eircode, 7 characters (e.g. D02 X285).",
+      "csChannels": ["all channels"]
+    },
+    {
+      "chatId": 22064,
+      "domain": "exittoys.pl",
+      "lang": "pl",
+      "shopUrl": "https://www.exittoys.pl",
+      "contactEmail": "info@exittoys.com",
+      "countryName": "Polska",
+      "zipHint": "Polska: 5 cyfr w formacie 00-000 (np. 00-950).",
+      "csChannels": ["all channels"]
+    },
+    {
+      "chatId": 22066,
+      "domain": "exittoys.de",
+      "lang": "de",
+      "shopUrl": "https://www.exittoys.de",
+      "contactEmail": "info@exittoys.de",
+      "countryName": "Deutschland",
+      "zipHint": "Deutschland: 5 Ziffern (z. B. 10115).",
+      "csChannels": ["all channels"]
+    },
+    {
+      "chatId": 22067,
+      "domain": "exittoys.at",
+      "lang": "de",
+      "shopUrl": "https://www.exittoys.at",
+      "contactEmail": "info@exittoys.de",
+      "countryName": "Österreich",
+      "zipHint": "Österreich: 4 Ziffern (z. B. 1010).",
+      "csChannels": ["all channels"]
+    }
+  ]
+}

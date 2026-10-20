@@ -17,6 +17,8 @@ export async function sendEscalationMail(params: {
   summary?: string | null;
   transcript?: string | null;
   channel: string;
+  /** Webshop van de bot, bijv. exittoys.de. */
+  shop?: string | null;
   sessionId: number;
 }): Promise<MailResult> {
   const to = config.mail.to;
@@ -31,6 +33,7 @@ export async function sendEscalationMail(params: {
     "",
     `Naam:     ${params.name ?? "niet opgegeven"}`,
     `E-mail:   ${params.email ?? "niet opgegeven"}`,
+    params.shop ? `Webshop:  ${params.shop}` : null,
     `Kanaal:   ${params.channel}`,
     `Sessie:   #${params.sessionId}`,
     params.reason ? `Reden:    ${params.reason}` : null,

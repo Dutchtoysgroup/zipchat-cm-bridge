@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { store } from "@/db";
 import { closeSession } from "@/lib/bridge";
+import { shopForChat } from "@/lib/shops";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const sessions = await store.listSessions(100);
+  const rows = await store.listSessions(100);
+  // Eén bot per land; het land per sessie komt uit Zipchats eigen chatlijst.
+  const sessions = await Promise.all(
+    rows.map(async (s) => ({ ...s, country: (await shopForChat(s.zipchatChatId))?.country ?? null })),
+  );
   return NextResponse.json({ ok: true, storage: store.kind, sessions });
 }
 

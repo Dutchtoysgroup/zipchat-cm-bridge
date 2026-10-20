@@ -20,6 +20,8 @@ type Session = {
   cmChatId: string | null;
   customerName: string | null;
   customerEmail: string | null;
+  /** Land van de bot, bijv. DE; null als Zipchat het niet gaf. */
+  country: string | null;
   channel: string;
   status: string;
   reason: string | null;
@@ -295,6 +297,7 @@ export default function Dashboard({ user }: { user: string | null }) {
           <tr>
             <th>#</th>
             <th>Klant</th>
+            <th>Land</th>
             {!compact && <th>Kanaal</th>}
             <th>Modus</th>
             <th>Status</th>
@@ -317,6 +320,7 @@ export default function Dashboard({ user }: { user: string | null }) {
                 {s.customerName ?? <span className="zacht">—</span>}
                 {s.customerEmail && <div className="zacht klein">{s.customerEmail}</div>}
               </td>
+              <td>{s.country ?? <span className="zacht">—</span>}</td>
               {!compact && <td>{s.channel}</td>}
               <td>
                 <span className={`status ${s.mode === "livechat" ? "ok" : ""}`}>

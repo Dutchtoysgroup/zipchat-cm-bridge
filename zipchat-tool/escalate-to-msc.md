@@ -1,5 +1,9 @@
 # Custom tool: "Doorzetten naar medewerker (CM MSC)"
 
+> **Verouderd.** De actuele tekst per taal staat in [`skills/<taal>/doorzetten.md`](skills/nl/doorzetten.md)
+> en gaat met `scripts/zipchat-sync.mjs` naar de landenbots (zie de README).
+> Dit bestand blijft staan als achtergrond bij de oorspronkelijke opzet.
+
 Installeren via het Zipchat-dashboard (AI Training > Prompt and Tools) of via de
 Backend API: `POST /chats/:chat_id/custom_tools`.
 

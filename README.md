@@ -302,15 +302,57 @@ wachtrij.
 
 ## Wat er aan de Zipchat-kant moet gebeuren
 
-De custom tool in [`zipchat-tool/escalate-to-msc.md`](zipchat-tool/escalate-to-msc.md)
-installeren, met twee variabelen: `MSC_BRIDGE_URL` en `MSC_BRIDGE_SECRET`.
+Er is één Zipchat-bot per land, allemaal op dezelfde bridge en dezelfde
+CM-adapter. Bovenaan elk ticket staat `Land: DE (exittoys.de)`, zodat in de
+gedeelde inbox te zien is wie het oppakt; het dashboard heeft een kolom Land.
 
-`ZIPCHAT_SENDER_ID` is de Zipchat-gebruiker waaronder MSC-antwoorden in de
-widget verschijnen — maak daarvoor een teamlid aan met een neutrale naam
-("Klantenservice"), want die naam ziet de klant.
+| Chat | Webshop | Taal skills | Beheer |
+|---|---|---|---|
+| `20749` | exittoys.fr | NL-instructies, FR-trefwoorden | met de hand (het origineel) |
+| `21984` | exittoys.nl | nl | sync; klantenservice-skills alleen in de websitechat (`chat`), Instagram houdt de influencertool |
+| `22036` | exittoys.be | nl | sync |
+| `22057` · `22059` | exittoys.dk · .se | da · sv | sync |
+| `22060` · `22061` | exittoys.es · .it | es · it | sync |
+| `22062` · `22063` | exittoys.co.uk · .ie | en | sync |
+| `22064` | exittoys.pl | pl | sync |
+| `22066` · `22067` | exittoys.de · .at | de | sync |
 
-De beschikbare gebruikers haal je op met een endpoint dat niet in de Zipchat-
-documentatie staat, maar wel werkt:
+**Skills en promptregels komen uit de repo.** Per taal staan de vier
+klantenservice-skills (doorzetten, tracking, retour, klacht) en de promptregels
+in `zipchat-tool/skills/<taal>/`; per bot staan land, taal, webshop-URL,
+contactadres en postcodeformaat in `zipchat-tool/bots.json`. Het script zet ze
+op Zipchat:
+
+```bash
+node scripts/zipchat-sync.mjs            # proefdraai: laat zien wat er verandert
+node scripts/zipchat-sync.mjs --apply    # doorvoeren (--only 22066 voor één bot)
+```
+
+Env: `ZIPCHAT_API_TOKEN`, en voor het aanmaken van ontbrekende variabelen
+`MSC_BRIDGE_SECRET` (= `BRIDGE_SHARED_SECRET`), `EXIT_ORDER_API_AUTH` en
+`EXIT_TRACKING_API_AUTH` (de `dicode …`-headers uit HALO-tools 17 en 26).
+Zipchat geeft variabelen nooit terug; een bestaande variabele krijgt alleen een
+nieuwe waarde met `--set-variables`. Een wijziging in het dashboard aan een
+beheerde skill of aan het blok tussen de `EXIT-regels`-markers in de prompt
+wordt bij de volgende sync overschreven: pas de bron aan. De eigen tekst van een
+bot boven dat blok blijft van het dashboard.
+
+Wat je moet weten over de skills:
+
+* De doorzet-skill stuurt `chat_id` vast mee. Daarmee haalt de bridge het
+  gesprek bij de juiste bot op en komt het antwoord van de medewerker in het
+  juiste chatvenster. Zonder `chat_id` valt de bridge terug op
+  `ZIPCHAT_CHAT_ID` (FR).
+* De samenvatting voor het ticket is altijd Nederlands; het gesprek zelf gaat in
+  de taal van de klant mee.
+* `NAAM NIET OPGEGEVEN` blijft in elke taal Nederlands: de bridge herkent alleen
+  die tekst als bewust ontbrekende naam.
+* Kanalen voor een skill: `chat` is de websitechat (niet `web`, dat weigert de
+  API), verder `instagram` of `all channels`.
+
+`ZIPCHAT_SENDER_ID` (`31118`, "EXIT Toys Klantenservice") is de
+Zipchat-gebruiker waaronder MSC-antwoorden in de widget verschijnen. Die moet lid
+zijn van elke bot, anders kan de bridge het gesprek niet overnemen. Controleren:
 
 ```bash
 curl -s "https://app.zipchat.ai/api/integrations/backend_api/v1/chats/<chat_id>/users" \

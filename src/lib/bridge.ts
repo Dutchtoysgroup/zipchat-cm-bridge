@@ -4,6 +4,7 @@ import * as zipchat from "./zipchat";
 import * as cm from "./cm";
 import { sendEscalationMail } from "./notify";
 import { checkPresence } from "./presence";
+import { shopForChat } from "./shops";
 
 /* ------------------------------------------------------------- Escaleren */
 
@@ -88,7 +89,10 @@ export async function resolveLiveAvailability(): Promise<{
  * naar Mobile Service Cloud en houden beide kanten daarna gekoppeld.
  */
 export async function escalate(input: EscalateInput): Promise<EscalateResult> {
+  // Elke landenbot stuurt zijn eigen chat_id mee. ZIPCHAT_CHAT_ID (de FR-bot)
+  // is alleen nog de terugval voor een tool die dat niet doet.
   const chatId = input.chatId ?? config.zipchat.chatId ?? "unknown-chat";
+  const shop = await shopForChat(chatId);
   const channel: Channel = input.channel ?? "webchat";
   const hasConversation = !!input.conversationId;
   const availability = await resolveLiveAvailability();
@@ -200,8 +204,8 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     sessionId: session.id,
     direction: "zipchat->bridge",
     kind: "escalate.received",
-    summary: `Escalatie voor ${name ?? "onbekende klant"} (${email ?? "geen e-mail"})`,
-    payload: { conversationId, reason: input.reason, messages: messages.length, hasConversation },
+    summary: `Escalatie voor ${name ?? "onbekende klant"} (${email ?? "geen e-mail"})${shop ? ` via ${shop.domain}` : ""}`,
+    payload: { conversationId, chatId, shop: shop?.domain, reason: input.reason, messages: messages.length, hasConversation },
   });
 
   // 3. AI pauzeren zodat de bot niet door de agent heen praat.
@@ -233,8 +237,14 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
 
   // Blokken worden gescheiden door een lege regel; binnen een blok staan de
   // regels onder elkaar. Robin toont het ticket als platte tekst, dus die
-  // witruimte is het enige wat het leesbaar houdt.
-  const gegevens = [name ? `Naam: ${name}` : null, email ? `E-mail: ${email}` : null, input.reason ? `Reden: ${input.reason}` : null]
+  // witruimte is het enige wat het leesbaar houdt. Alle landen komen in
+  // dezelfde inbox; het land bovenaan vertelt wie het oppakt.
+  const gegevens = [
+    shop ? `Land: ${shop.country} (${shop.domain})` : null,
+    name ? `Naam: ${name}` : null,
+    email ? `E-mail: ${email}` : null,
+    input.reason ? `Reden: ${input.reason}` : null,
+  ]
     .filter(Boolean)
     .join("\n");
 
@@ -294,6 +304,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     summary: input.summary,
     transcript: transcript || null,
     channel,
+    shop: shop?.domain,
     sessionId: session.id,
   });
   if (!mail.off) await store.logEvent({
@@ -766,24 +777,18 @@ export function valideerKlantgegevens(name?: string | null, email?: string | nul
 /**
  * Wat de assistent tegen de klant zegt als het gesprek wel is doorgezet maar
  * het antwoord niet in dit chatvenster terug kan komen. De tekst staat hier
- * voluit — de bot moet 'm overnemen, niet zelf iets verzinnen.
+ * voluit — de bot moet 'm overnemen, niet zelf iets verzinnen. Er zijn bots in
+ * elf talen; de bot vertaalt deze ene zin beter dan wij hem hier elf keer
+ * bijhouden.
  */
 function mailHandoverMessage(): string {
   const tijd = config.followUp.responseTime?.trim();
-  const termijn = tijd
-    ? `normalement sous ${tijd === "24 uur" ? "24 heures" : tijd}`
-    : "dans les meilleurs delais";
-  const frans = [
-    "Votre demande a bien ete transmise a un conseiller.",
-    `Vous recevrez une reponse par e-mail a l'adresse que vous avez indiquee, ${termijn}.`,
-  ].join(" ");
-
+  const termijn = tijd ? `meestal binnen ${tijd}` : "zo snel mogelijk";
   return [
-    "Geef de klant dit antwoord. Neem het over zoals het er staat:",
+    "Geef de klant dit antwoord, getrouw vertaald naar de taal van het gesprek:",
     "",
-    frans,
+    `Je vraag is doorgegeven aan een collega van de klantenservice. Je krijgt ${termijn} een antwoord per e-mail, op het adres dat je hebt opgegeven.`,
     "",
-    "Is het gesprek niet in het Frans, vertaal het dan getrouw naar de taal van de klant.",
     "Beloof niets anders: geen terugbelverzoek, geen medewerker in dit chatvenster.",
   ].join("\n");
 }

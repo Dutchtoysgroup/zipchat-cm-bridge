@@ -1,0 +1,52 @@
+{
+  "_toelichting": "Naam van elke skill per taal, zoals hij in het Zipchat-dashboard staat. Het sync-script herkent een bestaande skill aan deze naam; hernoem je er een, zet dan de oude naam in 'vorigeNamen' zodat er geen dubbele skill ontstaat.",
+  "skills": {
+    "doorzetten": {
+      "nl": "Doorzetten naar medewerker",
+      "de": "An Mitarbeiter weiterleiten",
+      "en": "Hand over to a colleague",
+      "da": "Videresend til en medarbejder",
+      "sv": "Koppla till en medarbetare",
+      "es": "Pasar a un compañero",
+      "it": "Passa a un collega",
+      "pl": "Przekaż do konsultanta"
+    },
+    "tracking": {
+      "nl": "Bestelling en tracking opzoeken",
+      "de": "Bestellung und Sendungsverfolgung abrufen",
+      "en": "Look up order and tracking",
+      "da": "Find ordre og sporing",
+      "sv": "Hitta order och spårning",
+      "es": "Consultar pedido y seguimiento",
+      "it": "Cerca ordine e tracking",
+      "pl": "Sprawdź zamówienie i przesyłkę"
+    },
+    "retour": {
+      "nl": "Retour aanvragen",
+      "de": "Rücksendung anfragen",
+      "en": "Request a return",
+      "da": "Anmod om returnering",
+      "sv": "Begär retur",
+      "es": "Solicitar una devolución",
+      "it": "Richiedi un reso",
+      "pl": "Zgłoś zwrot"
+    },
+    "klacht": {
+      "nl": "Klacht of serviceaanvraag melden",
+      "de": "Reklamation oder Serviceanfrage melden",
+      "en": "Report a complaint or service request",
+      "da": "Indberet reklamation eller serviceanmodning",
+      "sv": "Anmäl reklamation eller serviceärende",
+      "es": "Comunicar una reclamación o solicitud de servicio",
+      "it": "Segnala un reclamo o una richiesta di assistenza",
+      "pl": "Zgłoś reklamację lub prośbę serwisową"
+    }
+  },
+  "vorigeNamen": {},
+  "variabelen": {
+    "doorzetten": ["MSC_BRIDGE_URL", "MSC_BRIDGE_SECRET"],
+    "tracking": ["EXIT_ORDER_API_AUTH", "EXIT_TRACKING_API_AUTH"],
+    "retour": ["EXIT_ORDER_API_AUTH"],
+    "klacht": ["EXIT_ORDER_API_AUTH"]
+  }
+}

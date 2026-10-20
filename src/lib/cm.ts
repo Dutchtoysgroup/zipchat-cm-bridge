@@ -160,7 +160,34 @@ export function extractInboundTexts(payload: TwoWayPayload): string[] {
     .filter((m) => String(m.$type).toLowerCase() === "text" && typeof m.text === "string" && m.text.trim() !== "")
     // ClientTerminated = richting klant, dus afkomstig van de agent in MSC.
     .filter((m) => m.direction !== "ClientOriginated")
-    .map((m) => m.text.trim());
+    .map((m) => htmlToText(m.text))
+    .filter((t) => t !== "");
+}
+
+/**
+ * Robin stuurt het antwoord van een medewerker als HTML ("<div>Hoi</div>",
+ * links als <a href>). In de chat hoort platte tekst: regels blijven regels en
+ * een link wordt de URL zelf, zodat hij klikbaar blijft en niets wegvalt.
+ */
+export function htmlToText(html: string): string {
+  return html
+    .replace(/<a\s[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gis, (_m, href: string, label: string) => {
+      const tekst = label.replace(/<[^>]+>/g, "").trim();
+      return !tekst || tekst === href || href.includes(tekst) ? href : `${tekst} (${href})`;
+    })
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-6])>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "- ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /** Verbindingstest voor het dashboard. */

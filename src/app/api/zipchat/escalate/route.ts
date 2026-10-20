@@ -9,13 +9,18 @@ export const dynamic = "force-dynamic";
 const Body = z.object({
   // Optioneel: lukt het de agent niet het gespreks-id te bepalen, dan willen we
   // nog steeds een ticket aanmaken — liever zonder transcript dan geen ticket.
-  conversation_id: z.union([z.string(), z.number()]).transform(String).optional(),
+  // De skills laten het veld leeg ("") als de bot het id niet zeker weet. Leeg
+  // telt als ontbrekend; anders liep de bridge daar op stuk (HTTP 500).
+  conversation_id: z
+    .union([z.string(), z.number()])
+    .transform((v) => String(v).trim() || undefined)
+    .optional(),
   summary: z.string().trim().max(2000).optional(),
   name: z.string().trim().min(1).optional(),
   email: z.string().trim().email().optional(),
   reason: z.string().trim().optional(),
   channel: z.enum(["webchat", "email", "sms", "whatsapp"]).optional(),
-  chat_id: z.string().trim().optional(),
+  chat_id: z.string().trim().transform((v) => v || undefined).optional(),
 });
 
 export async function POST(req: Request) {

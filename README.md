@@ -74,7 +74,8 @@ Klant ──▶ Zipchat-widget ──▶ AI kan het niet aan
   daarna `AddAutoMessage` met de bevestiging, en een korte SignalR-verbinding
   (`selfServiceHub.connectClient`) die meteen weer sluit. Zonder dat laatste
   denkt Robin dat de klant nog op de site zit en zet hij het antwoord in de
-  widget in plaats van in de mail.
+  widget in plaats van in de mail. Ook zo mailt Robin het antwoord pas na
+  ongeveer 10 minuten; dat is Robins eigen wachttijd.
 * **Webshop per land** via de `Referrer`: Robin koppelt het begin van de URL aan
   een webshop. NL/BE → EXIT Toys Nederland, DE/AT → Duitsland, FR → France,
   ES/IT/PL → Spanje/Italië/Polen, DK/SE/UK/IE → International. De afzender van

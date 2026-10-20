@@ -18,8 +18,9 @@ import { requestJson, type ApiResult } from "./http";
  *    de widget doet na het versturen.
  * 3. Een korte SignalR-verbinding (selfServiceHub.connectClient) die meteen
  *    weer dicht gaat. Zolang Robin denkt dat de bezoeker op de site zit, zet
- *    hij een antwoord in de widget en niet in de mail; zonder deze stap kwam
- *    de mail bij de eerste test pas veel later.
+ *    hij een antwoord in de widget en niet in de mail. Ook mét deze stap
+ *    mailt Robin het antwoord pas na ongeveer 10 minuten (getest 20 okt 2026):
+ *    zo lang wacht hij of de bezoeker het in de widget leest.
  *
  * Verandert CM deze route, dan valt de bridge terug op de Conversational
  * Router (ESCALATION_TARGET=cm).

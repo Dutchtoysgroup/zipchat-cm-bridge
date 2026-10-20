@@ -4,9 +4,12 @@
 `main` deployt via GitHub Actions (`.github/workflows/deploy-azure.yml`) naar
 productie.
 
-**Live:** https://dtg-zipchat-cm-bridge-weu.azurewebsites.net — het dashboard zit
-achter Basic auth (gebruiker `exit`; wachtwoord staat in `.secrets-generated.txt`,
-en in de App Service als `DASHBOARD_PASSWORD`).
+**Live:** https://zipchat.dashboard-exit.com — aanmelden via het
+platformdashboard (admin.dashboard-exit.com), net als het contractregister. Wie
+erin mag, regel je in admin onder Gebruikers & toegang, kolom Zipchat; zie
+[Aanmelden en toegang](#aanmelden-en-toegang). Het azurewebsites-adres
+(`dtg-zipchat-cm-bridge-weu.azurewebsites.net`) blijft werken voor CM, Zipchat
+en de cron; wie daar het dashboard opent, gaat door naar het vaste adres.
 
 ## Waar het draait
 
@@ -155,19 +158,52 @@ Beveiliging in twee lagen:
   (als `Authorization: Bearer`) voor de poller. Die geheimen verzin je zelf — je krijgt ze niet
   van CM of Zipchat; je genereert een willekeurige string en zet dezelfde waarde
   aan beide kanten neer.
-- **Het dashboard en zijn data-endpoints** zitten achter Basic auth
-  (`src/middleware.ts`), want daar staan klantnamen, e-mailadressen en
-  transcripten in. CM en Zipchat kunnen geen Basic auth meesturen, vandaar de
-  uitzondering hierboven.
+- **Het dashboard en zijn data-endpoints** vragen een persoonlijke aanmelding
+  via admin én toegang in de lijst (`src/middleware.ts`), want daar staan
+  klantnamen, e-mailadressen en transcripten in. CM en Zipchat kunnen niet
+  aanmelden, vandaar de uitzondering hierboven.
+
+### Aanmelden en toegang
+
+Sinds 20 oktober 2026; daarvoor één gedeeld Basic-auth-wachtwoord.
+
+```
+/  zonder sessie → /auth/login → admin.dashboard-exit.com/sso/zipchat/start
+   → (aanmelden bij admin, via Marketing) → /auth/callback?ticket=…
+   → ticket controleren, eenmalig, toegang? → sessiecookie (8 uur) → /
+```
+
+* **Wie erin mag:** de vaste accounts in de app setting `VASTE_TOEGANG`
+  (Marketing-account-id's, kommagescheiden; nu Sven), plus wie in admin onder
+  Gebruikers & toegang, kolom Zipchat, toegang kreeg. Dat laatste staat in
+  `app_zipchat_bridge.toegang` met een log in `toegang_log` (migratie V169 in
+  `dtg-data-platform`). De vaste lijst kan niemand vanuit een scherm weghalen;
+  zo sluit niemand de laatste buiten.
+* **Bij elk verzoek opnieuw gecontroleerd.** Trek je in admin iemands toegang
+  in, dan is diens volgende verzoek al geweigerd, ook met een geldige cookie.
+  Daarom draait de middleware in Node in plaats van de edge-runtime: hij leest
+  de database.
+* **Admin beheert, de bridge beslist.** Admin stuurt `toegang.lijst` en
+  `toegang.zet` ondertekend naar `POST /platform/manage` (kop
+  `X-DTG-Platform`, zie `src/lib/sso.ts`). De bridge toetst zelf of die
+  persoon toegang heeft, weigert wijzigingen aan vaste accounts en weigert
+  dat je je eigen toegang afneemt.
+* **Eén geheim:** `ADMIN_SSO_SECRET` hier is `SSO_ZIPCHAT_SECRET` op admin
+  (minstens 32 tekens). Het ondertekent het ticket, de beheeracties en de
+  sessiecookie, elk met een eigen voorvoegsel, zodat het een het ander niet is.
+  Roteren: op beide App Services tegelijk; iedereen moet daarna opnieuw
+  aanmelden.
+* **Afmelden** wist alleen de sessie van de bridge; de aanmelding bij admin
+  blijft staan.
 
 ### Geheimen
 
 Een ontbrekend geheim zet nooit iets open: het endpoint weigert dan elke
 aanroep (401), het dashboard geeft 503.
 
-* **Productie start niet** zonder `BRIDGE_SHARED_SECRET`, `CM_WEBHOOK_SECRET`
-  en `DASHBOARD_PASSWORD`, of met een van die drie (of `CRON_SECRET`, als die
-  gezet is) korter dan 16 tekens. `src/instrumentation.ts` controleert dat bij
+* **Productie start niet** zonder `BRIDGE_SHARED_SECRET` en `CM_WEBHOOK_SECRET`
+  (minstens 16 tekens, net als `CRON_SECRET` als die gezet is) en
+  `ADMIN_SSO_SECRET` (minstens 32 tekens). `src/instrumentation.ts` controleert dat bij
   het opstarten en stopt het proces met de namen in de log (App Service → Log
   stream). Liever een bridge die niet opkomt dan een die zonder authenticatie
   draait.

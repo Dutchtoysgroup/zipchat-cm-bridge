@@ -35,6 +35,13 @@ export const config = {
   /** Beschermt /api/zipchat/escalate en /api/poll tegen willekeurige aanroepen. */
   bridgeSecret: opt("BRIDGE_SHARED_SECRET"),
 
+  /** Aanmelden op het dashboard via het platformdashboard (src/lib/sso.ts). */
+  sso: {
+    /** Waar het dashboard woont; de sessiecookie hoort bij dit ene adres. */
+    dashboardUrl: (opt("DASHBOARD_URL") ?? "https://zipchat.dashboard-exit.com").replace(/\/+$/, ""),
+    adminUrl: (opt("ADMIN_URL") ?? "https://admin.dashboard-exit.com").replace(/\/+$/, ""),
+  },
+
   zipchat: {
     baseUrl: opt("ZIPCHAT_BASE_URL") ?? "https://app.zipchat.ai/api/integrations/backend_api/v1",
     token: opt("ZIPCHAT_API_TOKEN"),

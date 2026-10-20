@@ -48,6 +48,8 @@ body {
 header.top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
 header.top h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
 header.top .sub { color: var(--muted); font-size: 13px; }
+header.top .user { margin-left: auto; color: var(--muted); font-size: 13px; }
+button.link { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
 
 .panel {
   background: var(--panel);

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean, integer, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, boolean, integer, jsonb, index, uuid, bigint } from "drizzle-orm/pg-core";
 
 /** Eén escalatie: koppelt een Zipchat-gesprek aan een CM-router-chat. */
 export const sessions = pgTable(
@@ -61,4 +61,27 @@ export const settings = pgTable("bridge_settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Wie het dashboard mag openen, naast de vaste accounts in VASTE_TOEGANG. Op
+ * Marketing-account-id; een rij erbij is toegang, een rij weg is geen
+ * toegang. Gezet vanuit admin (Gebruikers & toegang). Migratie V169 in
+ * dtg-data-platform.
+ */
+export const access = pgTable("toegang", {
+  marketingId: uuid("marketing_id").primaryKey(),
+  grantedBy: uuid("toegekend_door").notNull(),
+  grantedByName: text("toegekend_door_naam").notNull(),
+  grantedAt: timestamp("toegekend_op", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Elke wijziging in toegang. Alleen toevoegen. */
+export const accessLog = pgTable("toegang_log", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  marketingId: uuid("marketing_id").notNull(),
+  action: text("actie").notNull(),
+  by: uuid("door").notNull(),
+  byName: text("door_naam").notNull(),
+  at: timestamp("op", { withTimezone: true }).notNull().defaultNow(),
 });

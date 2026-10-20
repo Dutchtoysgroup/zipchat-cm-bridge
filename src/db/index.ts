@@ -3,7 +3,7 @@ import { Pool, type PoolConfig } from "pg";
 import { DefaultAzureCredential } from "@azure/identity";
 import { and, desc, eq, inArray, isNotNull, like, lt, sql, type SQL } from "drizzle-orm";
 import { config } from "@/lib/config";
-import { sessions, events, settings, type Session, type NewSession, type BridgeEvent } from "./schema";
+import { sessions, events, settings, access, accessLog, type Session, type NewSession, type BridgeEvent } from "./schema";
 
 export type EventInput = {
   sessionId?: number | null;
@@ -43,6 +43,16 @@ export interface Store {
   acquireLease(key: string, token: string, ttlMs: number): Promise<boolean>;
   renewLease(key: string, token: string, ttlMs: number): Promise<boolean>;
   releaseLease(key: string, token: string): Promise<void>;
+  /**
+   * Eenmalig gebruik van een sleutel (het jti van een SSO-ticket). true = nu
+   * voor het eerst gezien. Oude sleutels ruimt hij zelf op.
+   */
+  claimOnce(key: string): Promise<boolean>;
+  /** Toegangslijst van het dashboard (tabel toegang, V169): Marketing-account-id's. */
+  listAccess(): Promise<string[]>;
+  hasAccess(marketingId: string): Promise<boolean>;
+  /** Toegang geven of nemen, met een regel in het log. false = er veranderde niets. */
+  setAccess(marketingId: string, granted: boolean, by: AccessActor): Promise<boolean>;
   logEvent(e: EventInput): Promise<void>;
   listEvents(limit?: number): Promise<BridgeEvent[]>;
   /** Bewaartermijn: events weg, naam en e-mail van gesloten sessies leeg. */
@@ -56,6 +66,13 @@ export interface Store {
  * bewaartermijn ruimt ze op.
  */
 const CURSOR_PREFIX = "forward_cursor:";
+
+/** Gebruikte SSO-tickets, ook in bridge_settings. Een ticket leeft 2 minuten. */
+const ONCE_PREFIX = "sso_jti:";
+const ONCE_KEEP_MS = 60 * 60 * 1000;
+
+/** Wie toegang geeft of neemt; komt in toegang_log. */
+export type AccessActor = { id: string; name: string };
 
 function parseCursor(raw: string | null): number | null {
   const n = Number(raw);
@@ -223,6 +240,52 @@ class PgStore implements Store {
     await this.db.delete(settings).where(and(eq(settings.key, key), sql`${leaseToken(settings.value)} = ${token}`));
   }
 
+  async claimOnce(key: string) {
+    await this.db
+      .delete(settings)
+      .where(and(like(settings.key, `${ONCE_PREFIX}%`), lt(settings.updatedAt, new Date(Date.now() - ONCE_KEEP_MS))));
+    const rows = await this.db
+      .insert(settings)
+      .values({ key: `${ONCE_PREFIX}${key}`, value: "1" })
+      .onConflictDoNothing()
+      .returning({ key: settings.key });
+    return rows.length > 0;
+  }
+
+  async listAccess() {
+    const rows = await this.db.select({ id: access.marketingId }).from(access).orderBy(access.marketingId);
+    return rows.map((r) => r.id);
+  }
+
+  async hasAccess(marketingId: string) {
+    const [row] = await this.db
+      .select({ id: access.marketingId })
+      .from(access)
+      .where(eq(access.marketingId, marketingId))
+      .limit(1);
+    return !!row;
+  }
+
+  async setAccess(marketingId: string, granted: boolean, by: AccessActor) {
+    return this.db.transaction(async (tx) => {
+      const changed = granted
+        ? await tx
+            .insert(access)
+            .values({ marketingId, grantedBy: by.id, grantedByName: by.name })
+            .onConflictDoNothing()
+            .returning({ id: access.marketingId })
+        : await tx.delete(access).where(eq(access.marketingId, marketingId)).returning({ id: access.marketingId });
+      if (changed.length === 0) return false;
+      await tx.insert(accessLog).values({
+        marketingId,
+        action: granted ? "toegekend" : "ingetrokken",
+        by: by.id,
+        byName: by.name,
+      });
+      return true;
+    });
+  }
+
   async logEvent(e: EventInput) {
     await this.db.insert(events).values({
       sessionId: e.sessionId ?? null,
@@ -351,6 +414,27 @@ class MemoryStore implements Store {
   }
   async releaseLease(key: string, token: string) {
     if (parseLease(this.settings.get(key) ?? null)?.token === token) this.settings.delete(key);
+  }
+  private access = new Map<string, AccessActor>();
+  private once = new Map<string, number>();
+  async claimOnce(key: string) {
+    const now = Date.now();
+    for (const [k, t] of this.once) if (t < now - ONCE_KEEP_MS) this.once.delete(k);
+    if (this.once.has(key)) return false;
+    this.once.set(key, now);
+    return true;
+  }
+  async listAccess() {
+    return [...this.access.keys()].sort();
+  }
+  async hasAccess(marketingId: string) {
+    return this.access.has(marketingId);
+  }
+  async setAccess(marketingId: string, granted: boolean, by: AccessActor) {
+    if (granted === this.access.has(marketingId)) return false;
+    if (granted) this.access.set(marketingId, by);
+    else this.access.delete(marketingId);
+    return true;
   }
   async logEvent(e: EventInput) {
     this.events.unshift({

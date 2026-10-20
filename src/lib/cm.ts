@@ -165,6 +165,16 @@ export function extractInboundTexts(payload: TwoWayPayload): string[] {
 }
 
 /**
+ * De afzender volgens Robin: de naam van de medewerker, of van het team bij een
+ * automatisch bericht. Staat in chat.metadata.metadata.agent.name.
+ */
+export function agentName(payload: TwoWayPayload): string | null {
+  const meta = (payload?.chat as { metadata?: { metadata?: { agent?: { name?: unknown } } } } | undefined)?.metadata;
+  const name = meta?.metadata?.agent?.name;
+  return typeof name === "string" && name.trim() ? name.trim() : null;
+}
+
+/**
  * Robin stuurt het antwoord van een medewerker als HTML ("<div>Hoi</div>",
  * links als <a href>). In de chat hoort platte tekst: regels blijven regels en
  * een link wordt de URL zelf, zodat hij klikbaar blijft en niets wegvalt.

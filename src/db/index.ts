@@ -7,7 +7,7 @@ import { sessions, events, settings, access, accessLog, type Session, type NewSe
 
 export type EventInput = {
   sessionId?: number | null;
-  direction: "zipchat->bridge" | "bridge->cm" | "cm->bridge" | "bridge->zipchat" | "internal";
+  direction: "zipchat->bridge" | "bridge->cm" | "cm->bridge" | "bridge->zipchat" | "bridge->klant" | "internal";
   kind: string;
   ok?: boolean;
   statusCode?: number | null;

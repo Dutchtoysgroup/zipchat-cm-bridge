@@ -148,6 +148,22 @@ export const config = {
    * Influencer- en samenwerkingsaanvragen. Die gaan bewust niet via CM/Robin
    * (dat is de klantenservice), maar per mail rechtstreeks naar marketing.
    */
+  /**
+   * Antwoorden uit Robin gaan per e-mail naar de klant (src/lib/shops.ts).
+   * Leeg = het info@-adres van het land; gezet = één afzender voor alles.
+   */
+  csMailFrom: opt("CS_MAIL_FROM"),
+
+  /**
+   * Afzendernamen in Robin waarvan berichten niet naar de klant gaan: de
+   * automatische berichten van een team, geen antwoorden van een mens.
+   * Kommagescheiden; standaard "WhatsApp" (het autobericht van dat team).
+   */
+  cmSkipSenders: (opt("CM_SKIP_SENDERS") ?? "WhatsApp")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
+
   marketing: {
     to: opt("MARKETING_EMAIL_TO") ?? "marketing@dutchtoysgroup.com",
   },

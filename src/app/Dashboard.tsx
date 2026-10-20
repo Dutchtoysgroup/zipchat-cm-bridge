@@ -123,6 +123,7 @@ const DIRECTION_LABEL: Record<string, string> = {
   "bridge->cm": "Bridge → CM",
   "cm->bridge": "CM → Bridge",
   "bridge->zipchat": "Bridge → Zipchat",
+  "bridge->klant": "Bridge → klant (e-mail)",
   internal: "Intern",
 };
 
@@ -454,14 +455,14 @@ export default function Dashboard({ user }: { user: string | null }) {
                 </div>
                 <div className="cijfer">
                   <span className="cijfer-label">
-                    Bemensing nu
+                    Antwoord aan klant
                     <Icon>
-                      <circle cx="12" cy="8" r="4" />
-                      <path d="M4 21a8 8 0 0 1 16 0" />
+                      <rect x="3" y="5" width="18" height="14" rx="2" />
+                      <path d="m3 7 9 6 9-6" />
                     </Icon>
                   </span>
-                  <strong>{live === null ? "—" : live ? "Live chat" : "Per e-mail"}</strong>
-                  <small>{mode ? (mode === "auto" ? "Automatisch, via MSC" : "Handmatig vastgezet") : "Wordt geladen"}</small>
+                  <strong>Per e-mail</strong>
+                  <small>Vanuit info@ van het land</small>
                 </div>
                 <div className="cijfer">
                   <span className="cijfer-label">
@@ -494,33 +495,13 @@ export default function Dashboard({ user }: { user: string | null }) {
                   <section className="kader">
                     <div className="kader-kop">
                       <div>
-                        <h2>Bemensing</h2>
+                        <h2>Hoe het loopt</h2>
                         <p className="uitleg">
-                          {mode === "auto"
-                            ? "Mobile Service Cloud bepaalt per gesprek of er een medewerker beschikbaar is; dezelfde bron die HALO gebruikt."
-                            : mode === "livechat"
-                              ? "Handmatig vastgezet: elke escalatie belooft een medewerker in de chat, ook als MSC offline meldt."
-                              : mode === "email"
-                                ? "Handmatig vastgezet: elke escalatie gaat als ticket naar CM en de klant krijgt antwoord per e-mail, ook als er wél iemand beschikbaar is."
-                                : "Wordt geladen…"}
+                          De AI zet het gesprek als ticket in Robin en blijft zelf in de chat. Antwoordt een
+                          medewerker in Robin, dan mailt de bridge dat antwoord naar de klant, vanuit info@ van
+                          het land. Een reactie van de klant komt via dat adres weer in Robin binnen.
                         </p>
                       </div>
-                      <span className={`status ${live ? "ok" : "let-op"}`}>
-                        {live === null ? "…" : live ? "nu live chat" : "nu geen live chat"}
-                      </span>
-                    </div>
-                    <div className="segment" role="group" aria-label="Bemensing">
-                      {(["auto", "livechat", "email"] as const).map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          aria-pressed={mode === m}
-                          disabled={!!busy || mode === null}
-                          onClick={() => switchMode(m)}
-                        >
-                          {MODE_LABEL[m]}
-                        </button>
-                      ))}
                     </div>
                   </section>
 

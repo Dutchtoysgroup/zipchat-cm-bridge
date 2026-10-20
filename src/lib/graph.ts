@@ -30,7 +30,7 @@ async function graphToken(): Promise<{ token?: string; error?: string }> {
 }
 
 /**
- * Verstuurt een platte-tekstmail uit de mailbox van MS_GRAPH_SENDER. Graph
+ * Verstuurt een platte-tekstmail uit de mailbox van MS_GRAPH_SENDER (of `from`). Graph
  * antwoordt met een lege 202; alleen die telt als verstuurd.
  */
 export async function sendGraphMail(params: {
@@ -38,6 +38,10 @@ export async function sendGraphMail(params: {
   subject: string;
   text: string;
   replyTo?: string | null;
+  /** Andere mailbox dan MS_GRAPH_SENDER; de app moet daar in Exchange op mogen versturen. */
+  from?: string;
+  /** In Verzonden items van de afzender bewaren, zodat terug te vinden is wat de klant kreeg. */
+  saveToSentItems?: boolean;
 }): Promise<MailResult> {
   if (!config.graph.configured) {
     return { ok: false, via: "graph", error: "MS_GRAPH_* niet ingesteld — er is geen mail verstuurd" };
@@ -46,7 +50,7 @@ export async function sendGraphMail(params: {
   if (!token) return { ok: false, via: "graph", error };
 
   const res = await requestJson(
-    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(config.graph.sender ?? "")}/sendMail`,
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(params.from ?? config.graph.sender ?? "")}/sendMail`,
     {
       method: "POST",
       timeoutMs: 30_000,
@@ -58,7 +62,7 @@ export async function sendGraphMail(params: {
           toRecipients: params.to.map((address) => ({ emailAddress: { address } })),
           ...(params.replyTo ? { replyTo: [{ emailAddress: { address: params.replyTo } }] } : {}),
         },
-        saveToSentItems: false,
+        saveToSentItems: params.saveToSentItems ?? false,
       }),
     },
   );

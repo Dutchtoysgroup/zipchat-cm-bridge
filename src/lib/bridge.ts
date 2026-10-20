@@ -4,7 +4,8 @@ import * as zipchat from "./zipchat";
 import * as cm from "./cm";
 import { sendEscalationMail } from "./notify";
 import { checkPresence } from "./presence";
-import { shopForChat } from "./shops";
+import { shopForChat, customerService } from "./shops";
+import { sendGraphMail } from "./graph";
 
 /* ------------------------------------------------------------- Escaleren */
 
@@ -95,19 +96,12 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   const shop = await shopForChat(chatId);
   const channel: Channel = input.channel ?? "webchat";
   const hasConversation = !!input.conversationId;
-  const availability = await resolveLiveAvailability();
-  const setting: HandoverMode = availability.live ? "livechat" : "email";
-  if (availability.presence) {
-    await store.logEvent({
-      direction: "internal",
-      kind: "presence.checked",
-      summary: `Mobile Service Cloud meldt: ${availability.presence.raw || "(leeg)"} → ${availability.live ? "live chat" : "geen live chat"}`,
-    });
-  }
+  // Sinds 20 okt 2026 gaat het antwoord van de medewerker altijd per e-mail
+  // naar de klant (handleAgentReply). De AI blijft in de chat; er is geen live
+  // chat meer, en dus ook geen beschikbaarheidscheck.
+  const setting: HandoverMode = "email";
 
-  // Naam en e-mailadres zijn altijd verplicht, ongeacht de modus. Ook een
-  // gesprek dat live in de chat wordt afgehandeld kan door de agent per mail
-  // worden opgevolgd, en een ticket zonder e-mailadres is een doodlopend spoor.
+  // Naam en e-mailadres zijn altijd verplicht: het antwoord gaat naar dat adres.
   const bezwaar = valideerKlantgegevens(input.name, input.email);
   if (bezwaar) {
     await store.logEvent({
@@ -117,11 +111,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     });
     return { ok: true, mode: setting, message: `${needDetailsMessage()}\n\n${bezwaar}` };
   }
-  // Live chat kan alleen als er iemand klaarstaat én we een gesprek hebben om
-  // antwoorden in terug te leggen. Ontbreekt één van beide, dan is het e-mail —
-  // en dat moet ook zo in de administratie staan, niet alleen in de belofte.
-  let liveChat = setting === "livechat" && hasConversation;
-  let mode: HandoverMode = "email";
+  const mode: HandoverMode = "email";
 
   // Zonder gespreks-id kunnen we geen transcript ophalen en geen antwoorden
   // terugbezorgen, maar het ticket moet er wél komen.
@@ -141,9 +131,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
       cmChatId: existing.cmChatId ?? undefined,
       mode: existing.mode as HandoverMode,
       message:
-        existing.mode === "livechat"
-          ? "Dit gesprek staat al bij een medewerker; zeg dat een collega het al heeft opgepakt."
-          : mailHandoverMessage(),
+        mailHandoverMessage(),
     };
   }
 
@@ -166,7 +154,6 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   }
 
   const transcriptOk = conv.ok;
-  if (!transcriptOk) liveChat = false; // zonder werkend gesprek geen live chat
   const messages = conv.data?.messages ?? [];
   // Het hele gesprek gaat mee naar het ticket, niet alleen de samenvatting van
   // de assistent: de medewerker moet kunnen lezen wat de klant echt zei.
@@ -175,7 +162,6 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   const email = input.email ?? conv.data?.lead?.email ?? null;
 
   // 2. Sessie vastleggen.
-  mode = liveChat ? "livechat" : "email";
 
   const clientId = `zipchat:${conversationId}`;
   const cmChat = cm.buildChat({ conversationClientId: clientId, clientName: name, channel: mapChannel(channel) });
@@ -208,31 +194,10 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     payload: { conversationId, chatId, shop: shop?.domain, reason: input.reason, messages: messages.length, hasConversation },
   });
 
-  // 3. AI pauzeren zodat de bot niet door de agent heen praat.
-  const assigneeId = Number(config.zipchat.senderId);
-  const pause = liveChat
-    ? await zipchat.setAssignment(conversationId, Number.isFinite(assigneeId) ? assigneeId : 0, chatId)
-    : { ok: true as const, status: 0, error: undefined };
-  await store.logEvent({
-    sessionId: session.id,
-    direction: "bridge->zipchat",
-    kind: "escalate.pause_ai",
-    ok: pause.ok,
-    statusCode: pause.status,
-    summary: liveChat
-      ? pause.ok
-        ? "AI gepauzeerd (manual mode)"
-        : `AI pauzeren mislukt: ${pause.error}`
-      : setting === "livechat" && !hasConversation
-        ? "Stond op live chat, maar zonder gespreks-id kan dat niet — als e-mail afgehandeld"
-        : "E-mailmodus — AI blijft actief, medewerker reageert per e-mail",
-  });
-
-  // 4. Context + transcript als één openingsbericht naar de router.
-  // In e-mailmodus staat er bewust geen instructieregel boven het ticket: het
-  // e-mailadres staat er toch al onder, en Robin weet zelf hoe hij antwoordt.
-  const instructie = liveChat
-    ? "LIVE CHAT — de klant zit nu in de chat te wachten. Antwoord hier; je bericht komt direct in het chatvenster."
+  // 3. Context + transcript als één openingsbericht naar de router. De AI blijft
+  // in de chat; de medewerker antwoordt hier en de bridge mailt dat door.
+  const instructie = email
+    ? `Je antwoord in dit gesprek gaat per e-mail naar de klant (${email}).`
     : null;
 
   // Blokken worden gescheiden door een lege regel; binnen een blok staan de
@@ -386,14 +351,19 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     cmChatId: realChatId,
     mode,
     mocked: sent.mocked,
-    message: liveChat
-      ? "Doorgezet. Zeg tegen de klant dat een collega zo snel mogelijk contact met hem opneemt via e-mail."
-      : mailHandoverMessage(),
+    message: mailHandoverMessage(),
   };
 }
 
-/* --------------------------------------------- Agent-antwoord terug naar de widget */
+/* --------------------------------------------- Agent-antwoord per e-mail naar de klant */
 
+/**
+ * Een medewerker antwoordt in Robin. Dat antwoord gaat altijd per e-mail naar
+ * de klant, vanuit de klantenservice van het land, en nooit in de Zipchat-chat:
+ * de klant zit daar na een doorzetting meestal allang niet meer, en de AI blijft
+ * er gewoon aan. Een reactie van de klant komt via het antwoordadres in Robin
+ * binnen.
+ */
 export async function handleAgentReply(payload: cm.TwoWayPayload): Promise<{ ok: boolean; delivered: number; message: string }> {
   const cmChatId = payload?.chat?.id;
   const clientId = payload?.chat?.conversationClientId;
@@ -415,48 +385,6 @@ export async function handleAgentReply(payload: cm.TwoWayPayload): Promise<{ ok:
     return { ok: false, delivered: 0, message: "Onbekende chat — geen gekoppelde Zipchat-sessie." };
   }
 
-  // Zonder Zipchat-gesprek is er geen chatvenster om het antwoord in te zetten.
-  if (session.zipchatConversationId.startsWith("zonder-id-")) {
-    const preview = cm.extractInboundTexts(payload).join(" | ").slice(0, 120);
-    await store.logEvent({
-      sessionId: session.id,
-      direction: "cm->bridge",
-      kind: "agent_reply.no_conversation",
-      ok: false,
-      summary: `Antwoord niet af te leveren, er is geen Zipchat-gesprek bij: "${preview}" — beantwoord de klant per e-mail`,
-      payload,
-    });
-    return { ok: false, delivered: 0, message: "Geen chatgesprek bekend; beantwoord de klant per e-mail." };
-  }
-
-  // Een sessie in e-mailmodus heeft de AI nog aan. Antwoordt een medewerker
-  // toch in de chat, dan neemt hij het gesprek daarmee over: de AI gaat op
-  // pauze (Zipchat weigert een handmatig bericht zolang de AI het gesprek
-  // heeft) en vanaf nu gaan de berichten van de klant naar CM. Tot 20 okt
-  // 2026 gooide de bridge zo'n antwoord weg, terwijl Robin het als verzonden
-  // toonde: de klant kreeg niets.
-  if (session.mode === "email") {
-    const assigneeId = Number(config.zipchat.senderId);
-    const takeover = await zipchat.setAssignment(
-      session.zipchatConversationId,
-      Number.isFinite(assigneeId) ? assigneeId : 0,
-      session.zipchatChatId,
-    );
-    await store.logEvent({
-      sessionId: session.id,
-      direction: "bridge->zipchat",
-      kind: "agent_reply.takeover",
-      ok: takeover.ok,
-      statusCode: takeover.status,
-      summary: takeover.ok
-        ? "Medewerker antwoordt in de chat: AI gepauzeerd, gesprek loopt nu als live chat"
-        : `Overnemen mislukt, antwoord komt mogelijk niet aan: ${takeover.error}`,
-    });
-    // Klantberichten vanaf nu doorsturen, niet wat de klant daarvoor met de AI
-    // besprak: dat hoort niet in het ticket.
-    await store.updateSession(session.id, { mode: "livechat", status: "active", lastForwardedAt: new Date() });
-  }
-
   const texts = cm.extractInboundTexts(payload);
   if (texts.length === 0) {
     await store.logEvent({
@@ -469,25 +397,60 @@ export async function handleAgentReply(payload: cm.TwoWayPayload): Promise<{ ok:
     return { ok: true, delivered: 0, message: "Geen tekstbericht in payload." };
   }
 
-  let delivered = 0;
-  for (const text of texts) {
-    const res = await zipchat.sendManualReply(session.zipchatConversationId, text, {
-      chatId: session.zipchatChatId,
-    });
+  // Robin stuurt ook de automatische berichten van een team mee, met de naam
+  // van dat team als afzender. Die zijn voor WhatsApp geschreven en horen niet
+  // in de mailbox van de klant.
+  const sender = cm.agentName(payload);
+  if (sender && config.cmSkipSenders.includes(sender.toLowerCase())) {
     await store.logEvent({
       sessionId: session.id,
-      direction: "bridge->zipchat",
-      kind: "agent_reply.delivered",
-      ok: res.ok,
-      statusCode: res.status,
-      summary: res.ok ? `Agent-antwoord in widget geplaatst: "${truncate(text)}"` : `Bezorgen mislukt: ${res.error}`,
-      payload: { text },
+      direction: "cm->bridge",
+      kind: "agent_reply.skipped",
+      summary: `Automatisch bericht van "${sender}" niet naar de klant gestuurd: "${truncate(texts.join(" "))}"`,
+      payload,
     });
-    if (res.ok) delivered++;
+    return { ok: true, delivered: 0, message: `Bericht van ${sender} overgeslagen.` };
   }
 
-  await store.updateSession(session.id, { lastAgentReplyAt: new Date(), status: "active" });
-  return { ok: delivered > 0, delivered, message: `${delivered} van ${texts.length} bericht(en) bezorgd.` };
+  const to = session.customerEmail?.trim();
+  if (!to) {
+    await store.logEvent({
+      sessionId: session.id,
+      direction: "cm->bridge",
+      kind: "agent_reply.no_email",
+      ok: false,
+      summary: `Antwoord NIET verstuurd: geen e-mailadres bij deze sessie. Beantwoord de klant vanuit Robin: "${truncate(texts.join(" "))}"`,
+      payload,
+    });
+    return { ok: false, delivered: 0, message: "Geen e-mailadres bekend." };
+  }
+
+  const service = customerService(await shopForChat(session.zipchatChatId));
+  const mail = await sendGraphMail({
+    to: [to],
+    from: service.from,
+    replyTo: service.from,
+    subject: service.subject,
+    text: texts.join("\n\n"),
+    saveToSentItems: true,
+  });
+  await store.logEvent({
+    sessionId: session.id,
+    direction: "bridge->klant",
+    kind: mail.ok ? "agent_reply.mailed" : "agent_reply.mail_failed",
+    ok: mail.ok,
+    summary: mail.ok
+      ? `Antwoord${sender ? ` van ${sender}` : ""} gemaild naar ${to} vanuit ${service.from}: "${truncate(texts.join(" "))}"`
+      : `Antwoord NIET gemaild naar ${to} vanuit ${service.from} (${mail.error}). Beantwoord de klant vanuit Robin: "${truncate(texts.join(" "))}"`,
+    payload: { text: texts },
+  });
+
+  await store.updateSession(session.id, { lastAgentReplyAt: new Date(), ...(sender ? { agentName: sender } : {}) });
+  return {
+    ok: mail.ok,
+    delivered: mail.ok ? 1 : 0,
+    message: mail.ok ? `Per e-mail naar de klant gestuurd.` : `Mailen mislukt: ${mail.error}`,
+  };
 }
 
 /* --------------------------------------- Klantberichten pollen (Zipchat heeft geen webhook) */
@@ -819,10 +782,10 @@ function mailHandoverMessage(): string {
   ].join("\n");
 }
 
-/** Wat de bot moet doen als er wél iemand klaarzit maar gegevens ontbreken. */
+/** Wat de bot moet doen als er gegevens ontbreken. */
 function needDetailsMessage(): string {
   return [
-    "Er zit nu wel een collega klaar, maar ik heb nog gegevens nodig.",
+    "Ik heb nog gegevens nodig: het antwoord van de collega komt per e-mail.",
     "Vraag de klant om zijn naam en e-mailadres, en roep deze tool daarna opnieuw aan met die gegevens erbij.",
     "Zeg nog niet dat het gesprek is doorgezet.",
   ].join("\n");

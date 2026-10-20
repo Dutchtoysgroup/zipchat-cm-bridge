@@ -48,31 +48,44 @@ medewerker komen terug in dezelfde chatwidget.
 
 ## Hoe het loopt
 
+Sinds 20 oktober 2026 gaat elk antwoord van een medewerker **per e-mail** naar
+de klant. Live chat in het Zipchat-venster is eruit: de klant zit daar na een
+doorzetting meestal niet meer, en de antwoorden kwamen er toch nooit aan (zie
+[Controleren of CM antwoorden aflevert](#controleren-of-cm-antwoorden-aflevert)).
+
 ```
 Klant ──▶ Zipchat-widget ──▶ AI kan het niet aan
                               │
-                              ▼  custom tool vraagt naam + e-mail
+                              ▼  skill vraagt naam + e-mail
                         POST /api/zipchat/escalate
                               │
-                    ┌─────────┴──────────┐
-                    │   deze bridge      │
-                    └─────────┬──────────┘
-       AI pauzeren ◀──────────┼──────────▶ transcript naar TwoWay-adapter
-       (Zipchat API)          │            + session state → agent
-                              ▼
-                    Conversational Router ──▶ Agent Inbox (MSC)
+                              ▼  transcript + land, AI blijft aan
+                    Conversational Router ──▶ Agent Inbox (Robin)
+                                                    │
+                                 medewerker antwoordt in het ticket
+                                                    │
+                              POST /api/cm/webhook ◀┘
                               │
-        agent typt antwoord ──┘
-                              │
-                    POST /api/cm/webhook
-                              ▼
-              bericht verschijnt in de widget
+                              ▼  Microsoft Graph
+              mail naar de klant, vanuit info@ van het land
+              (reactie van de klant komt via dat adres in Robin)
 ```
 
-Klantberichten tijdens een handover worden **gepolld** (`/api/poll`), omdat
-Zipchat geen webhook aanbiedt. Eén invocatie pollt ~50 seconden door met een
-interval van 5 seconden, en start daarna zichzelf opnieuw zolang er een gesprek
-open staat. Draait er niets, dan doet `/api/poll` één query en stopt meteen.
+* **Afzender** per land in `src/lib/shops.ts`: NL/BE `info@exittoys.nl`,
+  DE/AT `info@exittoys.de`, de rest `info@exittoys.com`; `CS_MAIL_FROM` zet één
+  afzender voor alles. Het onderwerp staat in de taal van het land; de tekst is
+  die van de medewerker, als platte tekst. De mail komt ook in Verzonden items
+  van die mailbox.
+* **De Graph-app moet op die mailboxen mogen versturen.** Hij mag dat in
+  Exchange alleen op wat er is toegekend; mag het niet, dan staat er
+  `agent_reply.mail_failed` met `ErrorAccessDenied` in het logboek en krijgt de
+  klant niets. Controleren zonder iets te versturen: een `sendMail` zonder
+  ontvanger geeft 400 als het mag en 403 als het niet mag.
+* **Automatische berichten** uit Robin (afzender = een teamnaam, zoals het
+  WhatsApp-autobericht) gaan niet naar de klant; welke namen, staat in
+  `CM_SKIP_SENDERS` (standaard `WhatsApp`).
+* De pollketting hieronder draait alleen nog voor oude live-chatsessies; nieuwe
+  sessies zijn altijd e-mail en worden niet gepolld.
 
 ### Pollketting en vangnet
 

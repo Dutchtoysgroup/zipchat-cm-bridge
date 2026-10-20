@@ -45,3 +45,41 @@ export async function shopForChat(chatId: string | null | undefined): Promise<Sh
   const domain = (await domains())?.get(String(chatId));
   return domain ? { domain, country: countryOf(domain) } : null;
 }
+
+/**
+ * Klantenservice per land: van welk adres een antwoord uit Robin naar de klant
+ * gaat, en in welke taal het onderwerp staat. De adressen zijn die op de
+ * webshops zelf (20 okt 2026). De Graph-app moet in Exchange op elk van deze
+ * mailboxen mogen versturen; CS_MAIL_FROM zet één afzender voor alle landen.
+ */
+const SERVICE: Record<string, { from: string; lang: string }> = {
+  NL: { from: "info@exittoys.nl", lang: "nl" },
+  BE: { from: "info@exittoys.nl", lang: "nl" },
+  DE: { from: "info@exittoys.de", lang: "de" },
+  AT: { from: "info@exittoys.de", lang: "de" },
+  FR: { from: "info@exittoys.com", lang: "fr" },
+  DK: { from: "info@exittoys.com", lang: "da" },
+  SE: { from: "info@exittoys.com", lang: "sv" },
+  ES: { from: "info@exittoys.com", lang: "es" },
+  IT: { from: "info@exittoys.com", lang: "it" },
+  UK: { from: "info@exittoys.com", lang: "en" },
+  IE: { from: "info@exittoys.com", lang: "en" },
+  PL: { from: "info@exittoys.com", lang: "pl" },
+};
+
+const SUBJECT: Record<string, string> = {
+  nl: "Antwoord op je vraag aan EXIT Toys",
+  de: "Antwort auf deine Frage an EXIT Toys",
+  fr: "Réponse à votre question à EXIT Toys",
+  da: "Svar på dit spørgsmål til EXIT Toys",
+  sv: "Svar på din fråga till EXIT Toys",
+  es: "Respuesta a tu consulta a EXIT Toys",
+  it: "Risposta alla tua domanda a EXIT Toys",
+  en: "Reply to your question to EXIT Toys",
+  pl: "Odpowiedź na Twoje pytanie do EXIT Toys",
+};
+
+export function customerService(shop: Shop | null): { from: string; subject: string } {
+  const s = (shop && SERVICE[shop.country]) ?? { from: "info@exittoys.com", lang: "en" };
+  return { from: config.csMailFrom ?? s.from, subject: SUBJECT[s.lang] ?? SUBJECT.en };
+}

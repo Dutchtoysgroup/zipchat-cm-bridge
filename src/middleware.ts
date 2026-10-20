@@ -18,8 +18,19 @@ import { currentUser } from "@/lib/toegang";
  */
 const MACHINE_PATHS = ["/api/cm/", "/api/zipchat/", "/api/poll", "/platform/"];
 
+/**
+ * Openbare bestanden: de JS en CSS van Next, de lettertypen en het logo (ook
+ * de afgemeld-pagina toont die). Hier in de code en niet alleen in `matcher`:
+ * een middleware in de Node-runtime krijgt in de standalone-build ook die
+ * paden binnen (nagegaan op 20 oktober 2026 met Next 15.5), en dan zou elk
+ * bestand een databasevraag kosten.
+ */
+const PUBLIC_PATHS = ["/_next/static/", "/_next/image", "/fonts/"];
+const PUBLIC_FILES = new Set(["/favicon.ico", "/exit-logo.svg"]);
+
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
+  if (PUBLIC_FILES.has(pathname) || PUBLIC_PATHS.some((p) => pathname.startsWith(p))) return NextResponse.next();
   if (MACHINE_PATHS.some((p) => pathname.startsWith(p))) return NextResponse.next();
 
   // Het vaste adres is DASHBOARD_URL. Wie via het azurewebsites-adres het
@@ -57,5 +68,6 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   runtime: "nodejs",
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Zie PUBLIC_PATHS: in de standalone-build telt deze lijst niet altijd mee.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|fonts/|exit-logo.svg).*)"],
 };

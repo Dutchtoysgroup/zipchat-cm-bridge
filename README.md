@@ -231,13 +231,13 @@ Maak in de Conversational Router een **TwoWay-adapter** aan en vul het formulier
 |---|---|
 | Name | bijv. `Zipchat bridge` |
 | **Is Bot** | **uit** — Zipchat is de bot en staat buiten de router; deze adapter is de kanaalkant |
-| Message Endpoint › Url | `https://dtg-zipchat-cm-bridge-weu.azurewebsites.net/api/cm/webhook` |
+| Message Endpoint › Url | `https://zipchat.dashboard-exit.com/api/cm/webhook` |
 | Message Endpoint › Method | `POST` |
 | Message Endpoint › Add header | naam `X-Bridge-Token`, waarde = je `CM_WEBHOOK_SECRET` |
-| Hand Over Endpoint › Url | `https://dtg-zipchat-cm-bridge-weu.azurewebsites.net/api/cm/handover` |
+| Hand Over Endpoint › Url | `https://zipchat.dashboard-exit.com/api/cm/handover` |
 | Hand Over Endpoint › Body | de standaardwaarde laten staan |
 | Hand Over Endpoint › Add header | dezelfde `X-Bridge-Token` |
-| Event Endpoint › Url | `https://dtg-zipchat-cm-bridge-weu.azurewebsites.net/api/cm/event?token=<CM_WEBHOOK_SECRET>` |
+| Event Endpoint › Url | `https://zipchat.dashboard-exit.com/api/cm/event?token=<CM_WEBHOOK_SECRET>` |
 
 Na opslaan krijg je de adapter-URL in de vorm
 `https://api.conversational.cm.com/conversational/twoway/v2/accounts/{technicalLinkId}/adapters/{adapterId}`.

@@ -1,5 +1,5 @@
 import { NextResponse, after } from "next/server";
-import { countPollable, pollOnce } from "@/lib/bridge";
+import { closeIdleEmailSessions, countPollable, LAST_POLL_KEY, pollOnce } from "@/lib/bridge";
 import { config } from "@/lib/config";
 import { checkCron } from "@/lib/auth";
 import { store } from "@/db";
@@ -27,6 +27,8 @@ export async function GET(req: Request) {
   if (!auth.ok) return NextResponse.json({ ok: false, error: "Niet geautoriseerd" }, { status: 401 });
 
   await enforceRetention();
+  await store.setSetting(LAST_POLL_KEY, new Date().toISOString());
+  await closeIdleEmailSessions();
 
   // Eén goedkope query: valt er niets te doen, dan is dit het hele bezoek.
   const pollable = await countPollable();

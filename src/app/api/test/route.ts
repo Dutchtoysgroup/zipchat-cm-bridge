@@ -140,6 +140,13 @@ export async function POST(req: Request) {
         channel: "webchat",
         sessionId: 0,
       });
+      if (res.off) {
+        return NextResponse.json({
+          ok: false,
+          message:
+            "De escalatiemail staat uit: zet ESCALATION_EMAIL_TO en RESEND_API_KEY of SMTP_URL. Escalaties gaan nu alleen naar CM.",
+        });
+      }
       await store.logEvent({
         direction: "internal",
         kind: res.ok ? "test.mail_sent" : "test.mail_failed",

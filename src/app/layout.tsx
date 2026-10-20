@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Zipchat-bridge · EXIT Toys",
-  description: "Koppeling tussen Zipchat en CM Mobile Service Cloud via de Conversational Router",
+  title: "Zipchat · EXIT Toys",
+  description: "Het Zipchat-dashboard van EXIT Toys: de AI-assistent op de webshops en het doorzetten naar Mobile Service Cloud",
   icons: { icon: { url: "/exit-logo.svg", type: "image/svg+xml" } },
 };
 

@@ -1,4 +1,11 @@
-# Zipchat ↔ CM Mobile Service Cloud bridge
+# Zipchat-dashboard (Zipchat ↔ CM Mobile Service Cloud bridge)
+
+Het Zipchat-dashboard van EXIT Toys. Het eerste onderdeel is de bridge die
+hieronder staat beschreven: gesprekken die de Zipchat-AI niet zelf afhandelt,
+doorzetten naar een medewerker in Mobile Service Cloud. Er komt meer
+Zipchat-functionaliteit bij; de zijbalk heeft daarom per onderdeel een kopje
+(`src/app/Dashboard.tsx`). De technische namen (repo, App Service, schema
+`app_zipchat_bridge`, app `zipchat` in admin) blijven zoals ze zijn.
 
 **Repo:** https://github.com/Dutchtoysgroup/zipchat-cm-bridge — elke push naar
 `main` deployt via GitHub Actions (`.github/workflows/deploy-azure.yml`) naar

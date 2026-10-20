@@ -54,6 +54,13 @@ export interface Store {
   /** Toegang geven of nemen, met een regel in het log. false = er veranderde niets. */
   setAccess(marketingId: string, granted: boolean, by: AccessActor): Promise<boolean>;
   logEvent(e: EventInput): Promise<void>;
+  /** Tijd van de laatste gebeurtenis in deze richting, binnen de bewaartermijn. */
+  lastEventAt(direction: EventInput["direction"]): Promise<Date | null>;
+  /**
+   * Sluit open sessies in deze modus die sinds `cutoff` niet zijn bijgewerkt.
+   * Geeft het aantal terug.
+   */
+  closeIdleSessions(mode: string, cutoff: Date): Promise<number>;
   listEvents(limit?: number): Promise<BridgeEvent[]>;
   /** Bewaartermijn: events weg, naam en e-mail van gesloten sessies leeg. */
   purgeOlderThan(cutoff: Date): Promise<{ events: number; sessions: number }>;
@@ -302,6 +309,31 @@ class PgStore implements Store {
     return this.db.select().from(events).orderBy(desc(events.createdAt)).limit(limit);
   }
 
+  async lastEventAt(direction: EventInput["direction"]) {
+    const [row] = await this.db
+      .select({ at: events.createdAt })
+      .from(events)
+      .where(eq(events.direction, direction))
+      .orderBy(desc(events.createdAt))
+      .limit(1);
+    return row?.at ?? null;
+  }
+
+  async closeIdleSessions(mode: string, cutoff: Date) {
+    const rows = await this.db
+      .update(sessions)
+      .set({ status: "closed", updatedAt: new Date() })
+      .where(
+        and(
+          inArray(sessions.status, ["escalating", "active"]),
+          eq(sessions.mode, mode),
+          lt(sessions.updatedAt, cutoff),
+        ),
+      )
+      .returning({ id: sessions.id });
+    return rows.length;
+  }
+
   async purgeOlderThan(cutoff: Date) {
     const ev = await this.db.delete(events).where(lt(events.createdAt, cutoff)).returning({ id: events.id });
     const ss = await this.db
@@ -452,6 +484,20 @@ class MemoryStore implements Store {
   }
   async listEvents(limit = 200) {
     return this.events.slice(0, limit);
+  }
+  async lastEventAt(direction: EventInput["direction"]) {
+    return this.events.find((e) => e.direction === direction)?.createdAt ?? null;
+  }
+  async closeIdleSessions(mode: string, cutoff: Date) {
+    let n = 0;
+    for (const s of this.sessions) {
+      if ((s.status === "escalating" || s.status === "active") && s.mode === mode && s.updatedAt < cutoff) {
+        s.status = "closed";
+        s.updatedAt = new Date();
+        n++;
+      }
+    }
+    return n;
   }
   async purgeOlderThan(cutoff: Date) {
     const before = this.events.length;

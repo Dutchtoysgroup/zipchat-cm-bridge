@@ -1,13 +1,14 @@
 import { config } from "./config";
 import { requestJson } from "./http";
 
-export type MailResult = { ok: boolean; via: string; error?: string };
+export type MailResult = { ok: boolean; via: string; error?: string; off?: boolean };
 
 /**
- * Stuurt de escalatie per e-mail. Bewust provider-onafhankelijk: Resend als er
- * een sleutel is, anders SMTP. Zonder allebei doen we niets en zeggen we dat
- * ook — stil falen is hier het gevaarlijkst, want dan denkt de klant dat er
- * iemand meekijkt terwijl er niemand iets ontvangt.
+ * Stuurt de escalatie ook per e-mail, naast de routing naar Mobile Service
+ * Cloud. Bewust provider-onafhankelijk: Resend als er een sleutel is, anders
+ * SMTP. Zonder ontvanger of verzendroute staat de mail uit (`off`): de
+ * escalatie gaat dan alleen naar CM, en dat is geen fout. Mislukt een mail
+ * die wél is ingesteld, dan is dat wel een fout.
  */
 export async function sendEscalationMail(params: {
   name?: string | null;
@@ -19,7 +20,7 @@ export async function sendEscalationMail(params: {
   sessionId: number;
 }): Promise<MailResult> {
   const to = config.mail.to;
-  if (!to) return { ok: false, via: "geen", error: "ESCALATION_EMAIL_TO niet ingesteld" };
+  if (!to || !config.mail.configured) return { ok: true, via: "geen", off: true };
 
   const subject = `Klantvraag doorgezet: ${params.name ?? "onbekende klant"}${
     params.reason ? ` — ${params.reason}` : ""
@@ -78,9 +79,6 @@ export async function sendEscalationMail(params: {
     }
   }
 
-  return {
-    ok: false,
-    via: "geen",
-    error: "Geen RESEND_API_KEY of SMTP_URL ingesteld — er is geen mail verstuurd",
-  };
+  // Onbereikbaar: `configured` eist Resend of SMTP.
+  return { ok: true, via: "geen", off: true };
 }

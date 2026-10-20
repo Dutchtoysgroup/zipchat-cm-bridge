@@ -75,8 +75,8 @@ const VIEWS: { key: View; label: string; icon: React.ReactNode }[] = [
 
 const KOP: Record<View, { titel: string; sub: string }> = {
   overzicht: {
-    titel: "Zipchat-bridge",
-    sub: "Zet gesprekken die de Zipchat-AI niet zelf afhandelt door naar een medewerker in Mobile Service Cloud, en brengt diens antwoorden terug in de chat.",
+    titel: "Doorzetten naar een medewerker",
+    sub: "Gesprekken die de Zipchat-AI niet zelf afhandelt, gaan naar een medewerker in Mobile Service Cloud; diens antwoorden komen terug in dezelfde chat.",
   },
   gesprekken: {
     titel: "Gesprekken",
@@ -346,13 +346,14 @@ export default function Dashboard({ user }: { user: string | null }) {
         Naar inhoud
       </a>
       <aside className="zijbalk">
-        <a className="merk" href="#overzicht" aria-label="Zipchat-bridge, overzicht">
+        <a className="merk" href="#overzicht" aria-label="Zipchat, overzicht">
           <img src="/exit-logo.svg" width={48} height={36} alt="EXIT Toys" />
           <span>
-            Zipchat-bridge<small>Dutch Toys Group</small>
+            Zipchat<small>Dutch Toys Group</small>
           </span>
         </a>
-        <div className="nav-label">Werkruimte</div>
+        {/* Per onderdeel een kopje: hier komt meer Zipchat-functionaliteit bij. */}
+        <div className="nav-label">Doorzetten naar MSC</div>
         <nav aria-label="Hoofdnavigatie">
           {VIEWS.map((v) => (
             <a key={v.key} href={`#${v.key}`} aria-current={view === v.key ? "page" : undefined}>
@@ -367,15 +368,15 @@ export default function Dashboard({ user }: { user: string | null }) {
           ))}
         </nav>
         <div className="zij-voet">
-          <strong>EXIT Toys</strong>Zipchat ↔ Mobile Service Cloud
+          <strong>EXIT Toys</strong>De Zipchat-assistent op de webshops
         </div>
       </aside>
 
       <div className="werkruimte">
         <header className="topbalk">
           <div className="breadcrumb">
-            Klantenservice <span>/</span>
-            <strong>{view === "overzicht" ? "Zipchat-bridge" : kop.titel}</strong>
+            Zipchat <span>/</span>
+            <strong>{kop.titel}</strong>
           </div>
           {user && (
             <div className="wie">
@@ -393,7 +394,7 @@ export default function Dashboard({ user }: { user: string | null }) {
         <main id="inhoud">
           <div className="paginakop">
             <div>
-              <p className="bovenlabel">{view === "overzicht" ? "Klantenservice" : "Zipchat-bridge"}</p>
+              <p className="bovenlabel">Zipchat · Doorzetten naar MSC</p>
               <h1>{kop.titel}</h1>
               <p className="sub">{kop.sub}</p>
             </div>
@@ -427,8 +428,8 @@ export default function Dashboard({ user }: { user: string | null }) {
               {health && health.missing.length > 0 && (
                 <div className="notitie let-op">
                   <p>
-                    <strong>Nog niet ingevuld:</strong> <span className="mono">{health.missing.join(", ")}</span>. Zolang
-                    deze ontbreken draait de bridge in mock-modus: er gaat niets echt naar CM of Zipchat.
+                    <strong>Nog niet ingevuld:</strong> <span className="mono">{health.missing.join(", ")}</span>.
+                    {health.mockMode && " Zolang deze ontbreken draait de bridge in mock-modus: er gaat niets echt naar CM of Zipchat."}
                   </p>
                 </div>
               )}
@@ -445,7 +446,7 @@ export default function Dashboard({ user }: { user: string | null }) {
                     <Icon>{VIEWS[1].icon}</Icon>
                   </span>
                   <strong>{health?.openSessions ?? "—"}</strong>
-                  <small>Bij een medewerker of onderweg</small>
+                  <small>WhatsApp-gesprekken sluiten na een uur stilte</small>
                 </div>
                 <div className="cijfer">
                   <span className="cijfer-label">
@@ -465,8 +466,12 @@ export default function Dashboard({ user }: { user: string | null }) {
                       <path d="M4 12h12M12 6l6 6-6 6" />
                     </Icon>
                   </span>
-                  <strong>{fmtAgo(health?.lastWebhookAt)}</strong>
-                  <small>Antwoord van een medewerker</small>
+                  <strong>{health && !health.lastWebhookAt ? "Geen" : fmtAgo(health?.lastWebhookAt)}</strong>
+                  <small>
+                    {health && !health.lastWebhookAt
+                      ? "In 90 dagen geen antwoord via de chat"
+                      : "Antwoord van een medewerker"}
+                  </small>
                 </div>
                 <div className="cijfer">
                   <span className="cijfer-label">
@@ -476,7 +481,7 @@ export default function Dashboard({ user }: { user: string | null }) {
                     </Icon>
                   </span>
                   <strong>{fmtAgo(health?.lastPollAt)}</strong>
-                  <small>Klantberichten naar CM</small>
+                  <small>Elke 5 min, vaker tijdens een live chat</small>
                 </div>
               </div>
 
@@ -570,7 +575,9 @@ export default function Dashboard({ user }: { user: string | null }) {
                           health.mail.configured ? (
                             <span className="mono">{health.mail.to}</span>
                           ) : (
-                            <span className="status fout">niet ingesteld</span>
+                            <span className="status" title="Een extra kopie per mail naast CM; zet ESCALATION_EMAIL_TO en RESEND_API_KEY of SMTP_URL om hem aan te zetten.">
+                              uit, alleen via CM
+                            </span>
                           )
                         ) : (
                           "…"

@@ -56,7 +56,7 @@ export async function runAction(actor: { id: string; name: string }, input: Reco
       if (typeof input.id !== "string" || !UUID.test(input.id)) return refuse(400, "id moet een Marketing-account-id zijn");
       if (typeof input.toegang !== "boolean") return refuse(400, "toegang moet true of false zijn");
       const id = input.id.toLowerCase();
-      if (fixed.has(id)) return refuse(409, "Dit account staat vast in VASTE_TOEGANG; dat wijzig je alleen in de app settings van de bridge.");
+      if (fixed.has(id)) return refuse(409, "Dit account staat vast in VASTE_TOEGANG; dat wijzig je alleen in de app settings van het Zipchat-dashboard.");
       if (!input.toegang && id === actor.id) return refuse(409, "Je eigen toegang neem je niet zelf af.");
       // Wie wat gaf of nam, staat in toegang_log.
       await store.setAccess(id, input.toegang, actor);

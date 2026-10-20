@@ -2,13 +2,17 @@ import { NextResponse } from "next/server";
 import { config } from "@/lib/config";
 import { authDisabled } from "@/lib/authMode";
 import { store } from "@/db";
+import { LAST_POLL_KEY } from "@/lib/bridge";
 
 export const dynamic = "force-dynamic";
 
 /** Wat is er wél en niet geconfigureerd — voedt de statusbalk van het dashboard. */
 export async function GET() {
-  const events = await store.listEvents(50);
-  const open = await store.listOpenSessions();
+  const [open, lastWebhookAt, lastPollAt] = await Promise.all([
+    store.listOpenSessions(),
+    store.lastEventAt("cm->bridge"),
+    store.getSetting(LAST_POLL_KEY),
+  ]);
 
   const missing: string[] = [];
   if (!config.zipchat.token) missing.push("ZIPCHAT_API_TOKEN");
@@ -17,7 +21,8 @@ export async function GET() {
   if (!config.cm.accountId) missing.push("CM_ACCOUNT_ID");
   if (!config.cm.adapterId) missing.push("CM_ADAPTER_ID");
   if (!config.cm.productToken) missing.push("CM_PRODUCT_TOKEN");
-  if (!config.cm.agentStateNameId) missing.push("CM_AGENT_STATE_NAME_ID");
+  // CM_AGENT_STATE_NAME_ID hoort hier niet: dat is alleen voor de optionele
+  // routing control (README), en de router routeert zonder.
 
   const warnings: string[] = [];
   if (authDisabled()) {
@@ -27,22 +32,14 @@ export async function GET() {
     if (!config.cm.webhookSecret) warnings.push("CM_WEBHOOK_SECRET niet gezet — de CM-webhook weigert elke aanroep.");
   }
   if (store.kind === "memory") warnings.push("Geen DATABASE_URL — opslag is in-memory en verdwijnt bij herstart.");
-  if (!config.mail.to) {
-    warnings.push("ESCALATION_EMAIL_TO niet gezet — er gaat geen e-mail naar de klantenservice.");
-  } else if (!config.mail.configured) {
-    warnings.push(
-      `Geen RESEND_API_KEY of SMTP_URL — escalaties bereiken ${config.mail.to} NIET. De klant krijgt wel te horen dat er gereageerd wordt.`,
-    );
-  }
+  // De escalatiemail is een extra kopie naast CM; uit is geen waarschuwing.
+  // Het dashboard toont de stand onder Systeem.
 
   if (!config.graph.configured) {
     warnings.push(
       `MS_GRAPH_* niet volledig ingesteld — samenwerkingsaanvragen bereiken ${config.marketing.to} NIET.`,
     );
   }
-
-  const lastWebhook = events.find((e) => e.direction === "cm->bridge");
-  const lastPoll = events.find((e) => e.kind.startsWith("poll."));
 
   return NextResponse.json({
     ok: true,
@@ -55,8 +52,8 @@ export async function GET() {
     openSessions: open.length,
     missing,
     warnings,
-    lastWebhookAt: lastWebhook?.createdAt ?? null,
-    lastPollAt: lastPoll?.createdAt ?? null,
+    lastWebhookAt: lastWebhookAt?.toISOString() ?? null,
+    lastPollAt,
     poll: { windowMs: config.poll.windowMs, intervalMs: config.poll.intervalMs },
   });
 }

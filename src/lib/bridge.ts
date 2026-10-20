@@ -296,7 +296,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     channel,
     sessionId: session.id,
   });
-  await store.logEvent({
+  if (!mail.off) await store.logEvent({
     sessionId: session.id,
     direction: "internal",
     kind: mail.ok ? "escalate.mail_sent" : "escalate.mail_failed",
@@ -464,6 +464,28 @@ async function pollableSessions(): Promise<Session[]> {
   return (await store.listOpenSessions()).filter(
     (s) => s.mode === "livechat" && !s.zipchatConversationId.startsWith("zonder-id-"),
   );
+}
+
+/** bridge_settings: wanneer /api/poll voor het laatst liep, voor het dashboard. */
+export const LAST_POLL_KEY = "poll_last_run";
+
+/**
+ * Sessies in WhatsApp-modus (`email`) worden nooit gepolld: de klant praat
+ * gewoon door met de AI. Daardoor sloot de stiltetimer van de poller ze ook
+ * nooit en bleven ze voor altijd "actief". Nu sluiten ze na dezelfde stilte
+ * als een live chat. Een later antwoord uit CM vindt de sessie nog steeds.
+ */
+export async function closeIdleEmailSessions(): Promise<number> {
+  const cutoff = new Date(Date.now() - config.poll.idleTimeoutMin * 60_000);
+  const n = await store.closeIdleSessions("email", cutoff);
+  if (n > 0) {
+    await store.logEvent({
+      direction: "internal",
+      kind: "poll.closed_email_sessions",
+      summary: `${n} WhatsApp-sessie(s) gesloten na ${config.poll.idleTimeoutMin} min stilte`,
+    });
+  }
+  return n;
 }
 
 /** Eén query: moet er überhaupt gepolld worden? Houdt de idle-cron goedkoop. */

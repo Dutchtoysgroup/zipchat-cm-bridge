@@ -35,7 +35,7 @@ export async function POST(req: Request) {
   const id = actor.id.toLowerCase();
   if (!(await mayEnter(id))) {
     console.warn(`Beheer vanuit admin geweigerd voor ${actor.email}: geen toegang`);
-    return refuse(403, "Je account heeft geen toegang tot de Zipchat-bridge.");
+    return refuse(403, "Je account heeft geen toegang tot het Zipchat-dashboard.");
   }
   if (!req.headers.get("content-type")?.includes("application/json")) return refuse(415, "Alleen JSON.");
 

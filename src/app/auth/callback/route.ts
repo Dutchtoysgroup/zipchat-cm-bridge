@@ -29,7 +29,7 @@ export async function GET(req: Request) {
       // Met het id erbij: daarmee is het account in admin makkelijk terug te vinden.
       console.warn(`Aanmelding geweigerd voor ${t.email} (${t.marketingId}): geen toegang`);
       return text(
-        `Je account (${t.email}) heeft geen toegang tot de Zipchat-bridge.\n\n` +
+        `Je account (${t.email}) heeft geen toegang tot het Zipchat-dashboard.\n\n` +
           `Moet je erin? Vraag een beheerder om je toegang te geven in admin (Gebruikers & toegang, kolom Zipchat).\n` +
           `Je account-id: ${t.marketingId}\n`,
         403,

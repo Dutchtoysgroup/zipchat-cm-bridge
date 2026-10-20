@@ -1,6 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { handleAgentReply } from "@/lib/bridge";
-import { checkCmWebhookSecret } from "@/lib/auth";
+import { checkCmWebhookSecret, logCmRejected } from "@/lib/auth";
 import { readTolerantJson } from "@/lib/readBody";
 import { store } from "@/db";
 import type { TwoWayPayload } from "@/lib/cm";
@@ -11,7 +11,10 @@ export const dynamic = "force-dynamic";
 /** De Conversational Router POST't hier de berichten van de agent naartoe. */
 export async function POST(req: Request) {
   const auth = checkCmWebhookSecret(req);
-  if (!auth.ok) return NextResponse.json({ ok: false, error: "Niet geautoriseerd" }, { status: 401 });
+  if (!auth.ok) {
+    await logCmRejected(req, "webhook");
+    return NextResponse.json({ ok: false, error: "Niet geautoriseerd" }, { status: 401 });
+  }
 
   const body = await readTolerantJson(req, "webhook");
   if (!body.ok) return NextResponse.json({ ok: true, message: "Body niet leesbaar, ruw gelogd." });

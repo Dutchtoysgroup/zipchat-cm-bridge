@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { handleRouterEvent } from "@/lib/bridge";
-import { checkCmWebhookSecret } from "@/lib/auth";
+import { checkCmWebhookSecret, logCmRejected } from "@/lib/auth";
 import { readTolerantJson } from "@/lib/readBody";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +8,10 @@ export const dynamic = "force-dynamic";
 /** Event Endpoint uit de TwoWay-adapterconfiguratie in CM. */
 export async function POST(req: Request) {
   const auth = checkCmWebhookSecret(req);
-  if (!auth.ok) return NextResponse.json({ ok: false, error: "Niet geautoriseerd" }, { status: 401 });
+  if (!auth.ok) {
+    await logCmRejected(req, "event");
+    return NextResponse.json({ ok: false, error: "Niet geautoriseerd" }, { status: 401 });
+  }
 
   const body = await readTolerantJson(req, "event");
   if (!body.ok) return NextResponse.json({ ok: true, message: "Body niet leesbaar, ruw gelogd." });

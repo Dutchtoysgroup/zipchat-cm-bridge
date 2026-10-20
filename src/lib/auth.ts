@@ -53,3 +53,22 @@ export function checkCron(req: Request) {
   const expected = process.env.CRON_SECRET || config.bridgeSecret;
   return checkSecret(req, expected, "x-bridge-secret");
 }
+
+/**
+ * Een geweigerde aanroep op een CM-endpoint komt in het logboek. Van 21
+ * september tot 20 oktober 2026 kwam er niets van CM binnen en was niet te
+ * zien of CM het wel probeerde; zo wel. Het geheim zelf wordt nooit gelogd.
+ * Richting "internal", zodat "Laatste CM-webhook" alleen echte aflevering telt.
+ */
+export async function logCmRejected(req: Request, endpoint: string): Promise<void> {
+  const { store } = await import("@/db");
+  const given = presented(req, "x-bridge-token");
+  await store.logEvent({
+    direction: "internal",
+    kind: "cm.unauthorized",
+    ok: false,
+    statusCode: 401,
+    summary: `Aanroep op /api/cm/${endpoint} geweigerd: ${given ? "verkeerd geheim" : "geen geheim meegestuurd"}`,
+    payload: { userAgent: req.headers.get("user-agent") },
+  });
+}

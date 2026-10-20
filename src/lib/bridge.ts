@@ -244,7 +244,6 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
       shop,
       name: name ?? "NAAM NIET OPGEGEVEN",
       email,
-      summary: input.summary ?? null,
       waarschuwing,
       transcript,
     });
@@ -388,7 +387,6 @@ async function escalateViaRobin(p: {
   shop: Shop | null;
   name: string;
   email: string;
-  summary: string | null;
   waarschuwing: string | null;
   transcript: string;
 }): Promise<EscalateResult | null> {
@@ -396,7 +394,8 @@ async function escalateViaRobin(p: {
   const referrer = p.shop ? `https://www.${p.shop.domain}/` : "https://www.exittoys.com/";
   const content = [
     `Doorgezet door de AI-assistent in de chat van ${p.shop?.domain ?? "EXIT Toys"}${p.shop ? ` (${p.shop.country})` : ""}.`,
-    p.summary ? `Samenvatting: ${p.summary}` : null,
+    // Geen samenvatting: Robin citeert dit bericht in elk antwoord aan de klant,
+    // en Sven wil daar alleen het gesprek zelf in zien (20 okt 2026).
     p.waarschuwing,
     p.transcript ? `--- Gesprek ---\n\n${p.transcript}` : null,
   ]
@@ -883,8 +882,9 @@ export function valideerKlantgegevens(name?: string | null, email?: string | nul
  * bijhouden.
  */
 function mailHandoverMessage(): string {
+  // Zelfde termijn als de bevestiging die Robin de klant stuurt.
   const tijd = config.followUp.responseTime?.trim();
-  const termijn = tijd ? `meestal binnen ${tijd}` : "zo snel mogelijk";
+  const termijn = tijd ? `binnen ${tijd}` : "zo snel mogelijk";
   return [
     "Geef de klant dit antwoord, getrouw vertaald naar de taal van het gesprek:",
     "",

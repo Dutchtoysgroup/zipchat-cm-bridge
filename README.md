@@ -79,8 +79,11 @@ Klant ──▶ Zipchat-widget ──▶ AI kan het niet aan
   een webshop. NL/BE → EXIT Toys Nederland, DE/AT → Duitsland, FR → France,
   ES/IT/PL → Spanje/Italië/Polen, DK/SE/UK/IE → International. De afzender van
   de antwoordmail staat per webshop in Robin.
-* **De klant leest mee.** Robin citeert het eerste bericht onder elk antwoord:
-  de samenvatting en het gesprek staan dus ook in de mail aan de klant.
+* **De klant leest mee.** Robin citeert het eerste bericht onder elk antwoord.
+  Daarom staat er alleen het gesprek in, geen samenvatting van de assistent.
+* **Termijn.** De bot belooft "binnen 4 werkdagen" (app setting
+  `RESPONSE_TIME_TEXT`), net als de bevestiging die Robin stuurt. Pas je die in
+  Robin aan, zet dan ook deze setting gelijk.
 * **Onderwerp** in de taal van het land (`questionSubject` in `src/lib/shops.ts`).
 * **Terugval.** Neemt Robin het gesprek niet aan, of staat
   `ESCALATION_TARGET=cm`, dan gaat het als chat via de Conversational Router en

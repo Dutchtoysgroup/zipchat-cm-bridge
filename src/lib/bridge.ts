@@ -96,7 +96,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   const chatId = input.chatId ?? config.zipchat.chatId ?? "unknown-chat";
   const shop = await shopForChat(chatId);
   const channel: Channel = input.channel ?? "webchat";
-  const hasConversation = !!input.conversationId;
+  let hasConversation = !!input.conversationId;
   // Sinds 20 okt 2026 gaat het antwoord van de medewerker altijd per e-mail
   // naar de klant (handleAgentReply). De AI blijft in de chat; er is geen live
   // chat meer, en dus ook geen beschikbaarheidscheck.
@@ -114,9 +114,49 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   }
   const mode: HandoverMode = "email";
 
-  // Zonder gespreks-id kunnen we geen transcript ophalen en geen antwoorden
-  // terugbezorgen, maar het ticket moet er wél komen.
-  const conversationId = input.conversationId ?? `zonder-id-${Date.now()}`;
+  // 1. Het gesprek ophalen bij Zipchat. Het transcript is wat de klantenservice
+  // leest; zonder transcript staat er in Robin bijna niets.
+  let conversationId = input.conversationId;
+  let conv: zipchat.ApiConversationResult = conversationId
+    ? await zipchat.getConversation(conversationId, { chatId })
+    : { ok: true, status: 0, data: null };
+  if (conversationId && !conv.ok) {
+    await store.logEvent({
+      direction: "zipchat->bridge",
+      kind: "escalate.transcript_failed",
+      ok: false,
+      statusCode: conv.status,
+      summary: `${conv.error} — gesprek wordt op e-mailadres gezocht`,
+      payload: { conversationId },
+    });
+  }
+
+  // Gaf de assistent geen of een verkeerd gespreks-id mee, of zijn er geen
+  // berichten, zoek het gesprek dan op het e-mailadres dat de klant in de chat
+  // typte. Zo staat het gesprek ook dan in Robin.
+  if (!conv.ok || !conv.data?.messages?.length) {
+    const found = input.email ? await zipchat.findConversationByEmail(chatId, input.email) : null;
+    await store.logEvent({
+      direction: "zipchat->bridge",
+      kind: found ? "escalate.conversation_found" : "escalate.conversation_not_found",
+      ok: !!found,
+      summary: found
+        ? `Gesprek ${found.id} gevonden op e-mailadres ${input.email}${conversationId ? ` (de assistent gaf ${conversationId})` : " (de assistent gaf geen id)"}`
+        : `Geen gesprek gevonden bij ${input.email ?? "(geen e-mail)"} — de samenvatting van de assistent gaat mee in plaats van het gesprek`,
+      payload: { chatId, given: conversationId ?? null },
+    });
+    if (found) {
+      conversationId = found.id;
+      conv = { ok: true, status: 200, data: found.conversation };
+      hasConversation = true;
+    }
+  }
+
+  // Zonder gesprek komt er een vervangend id, zodat het ticket er toch komt.
+  if (!conversationId || !conv.ok) {
+    conversationId = conversationId ?? `zonder-id-${Date.now()}`;
+    if (!conv.ok) hasConversation = false;
+  }
 
   const existing = await store.getSessionByZipchatConversation(conversationId);
   if (existing && (existing.status === "escalating" || existing.status === "active")) {
@@ -131,27 +171,8 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
       sessionId: existing.id,
       cmChatId: existing.cmChatId ?? undefined,
       mode: existing.mode as HandoverMode,
-      message:
-        mailHandoverMessage(),
+      message: mailHandoverMessage(),
     };
-  }
-
-  // 1. Transcript ophalen bij Zipchat.
-  const conv = hasConversation
-    ? await zipchat.getConversation(conversationId, { chatId })
-    : { ok: true as const, status: 0, data: null, error: undefined };
-  // Het transcript is meegenomen, niet noodzakelijk. Lukt het niet, dan gaat de
-  // escalatie gewoon door met naam, e-mail en de samenvatting van de assistent:
-  // een klant zonder hulp laten zitten is erger dan een ticket zonder historie.
-  if (!conv.ok) {
-    await store.logEvent({
-      direction: "zipchat->bridge",
-      kind: "escalate.transcript_failed",
-      ok: false,
-      statusCode: conv.status,
-      summary: `${conv.error} — escalatie gaat door zonder gespreksgeschiedenis`,
-      payload: { conversationId },
-    });
   }
 
   const transcriptOk = conv.ok;
@@ -244,6 +265,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
       shop,
       name: name ?? "NAAM NIET OPGEGEVEN",
       email,
+      summary: input.summary ?? null,
       waarschuwing,
       transcript,
     });
@@ -387,6 +409,7 @@ async function escalateViaRobin(p: {
   shop: Shop | null;
   name: string;
   email: string;
+  summary: string | null;
   waarschuwing: string | null;
   transcript: string;
 }): Promise<EscalateResult | null> {
@@ -394,9 +417,13 @@ async function escalateViaRobin(p: {
   const referrer = p.shop ? `https://www.${p.shop.domain}/` : "https://www.exittoys.com/";
   const content = [
     `Doorgezet door de AI-assistent in de chat van ${p.shop?.domain ?? "EXIT Toys"}${p.shop ? ` (${p.shop.country})` : ""}.`,
-    // Geen samenvatting: Robin citeert dit bericht in elk antwoord aan de klant,
-    // en Sven wil daar alleen het gesprek zelf in zien (20 okt 2026).
-    p.waarschuwing,
+    // Robin citeert dit bericht in elk antwoord aan de klant; daar hoort het
+    // gesprek zelf in, niet een samenvatting (Sven, 20 okt 2026). Alleen als er
+    // geen gesprek te vinden was, staat de vraag er in de woorden van de
+    // assistent, in de taal van de klant: de klantenservice moet altijd lezen
+    // wat er gevraagd werd.
+    !p.transcript && p.summary ? `Vraag van de klant:\n${p.summary}` : null,
+    !p.transcript && !p.summary ? p.waarschuwing : null,
     p.transcript ? `--- Gesprek ---\n\n${p.transcript}` : null,
   ]
     .filter(Boolean)

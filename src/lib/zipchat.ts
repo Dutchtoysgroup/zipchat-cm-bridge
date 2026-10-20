@@ -37,6 +37,8 @@ function mock<T>(data: T): ApiResult<T> {
   return { ok: true, status: 200, data, mocked: true };
 }
 
+export type ApiConversationResult = ApiResult<ZipchatConversation>;
+
 /** Haal één gesprek op inclusief berichten. */
 export async function getConversation(
   conversationId: string,
@@ -193,4 +195,51 @@ export function formatTranscript(messages: ZipchatMessage[] = []): string {
     // Lege regel tussen elke beurt: in Robin is het ticket platte tekst en
     // zonder witruimte loopt het hele gesprek als één blok in elkaar over.
     .join("\n\n");
+}
+
+type ConversationSummary = {
+  id: number | string;
+  channel?: string;
+  last_message_at?: string | null;
+  lead?: { email?: string | null } | null;
+};
+
+/**
+ * Zoek het gesprek van deze klant als de assistent het gespreks-id niet (goed)
+ * meegaf. De klant heeft zijn e-mailadres in de chat getypt, want de skill
+ * vraagt erom: een recent gesprek op deze bot waarin dat adres staat (als lead
+ * of in een bericht van de klant) is het zijne. Bij twijfel (meer dan één
+ * kandidaat) wint het gesprek met het laatste bericht. Hooguit `maxDetails`
+ * gesprekken worden opengehaald, zodat de rate limit (120/min) heel blijft.
+ */
+export async function findConversationByEmail(
+  chatId: string,
+  email: string,
+  opts: { withinMinutes?: number; maxDetails?: number } = {},
+): Promise<{ id: string; conversation: ZipchatConversation } | null> {
+  if (config.mockZipchat) return null;
+  const needle = email.trim().toLowerCase();
+  if (!needle) return null;
+  const since = new Date(Date.now() - (opts.withinMinutes ?? 60) * 60_000).toISOString();
+  const q = new URLSearchParams({ per_page: "50", last_message_at_since: since });
+  const list = await requestJson<{ conversations?: ConversationSummary[] }>(
+    `${chatBase(chatId)}/conversations?${q}`,
+    { method: "GET", headers: headers(), timeoutMs: 10_000 },
+  );
+  const recent = list.data?.conversations ?? [];
+  if (!list.ok || recent.length === 0) return null;
+
+  // Eerst op het lead-adres: kost geen extra aanroepen.
+  const byLead = recent.find((c) => c.lead?.email?.trim().toLowerCase() === needle);
+  const candidates = byLead ? [byLead] : recent.slice(0, opts.maxDetails ?? 15);
+
+  for (const c of candidates) {
+    const conv = await getConversation(String(c.id), { chatId });
+    if (!conv.ok || !conv.data) continue;
+    const mentions = (conv.data.messages ?? []).some(
+      (m) => m.role === "user" && messageText(m).toLowerCase().includes(needle),
+    );
+    if (c === byLead || mentions) return { id: String(c.id), conversation: conv.data };
+  }
+  return null;
 }

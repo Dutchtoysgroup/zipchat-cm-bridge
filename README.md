@@ -82,6 +82,11 @@ Klant ──▶ Zipchat-widget ──▶ AI kan het niet aan
   de antwoordmail staat per webshop in Robin.
 * **De klant leest mee.** Robin citeert het eerste bericht onder elk antwoord.
   Daarom staat er alleen het gesprek in, geen samenvatting van de assistent.
+* **Altijd tekst in Robin.** Geeft de assistent geen of een verkeerd
+  gespreks-id mee, dan zoekt de bridge het gesprek op het e-mailadres dat de
+  klant in de chat typte (recente gesprekken op die bot, `findConversationByEmail`).
+  Pas als dat ook niets oplevert, gaat de samenvatting van de assistent mee als
+  "Vraag van de klant", in de taal van de klant (zo vragen de skills het).
 * **Termijn.** De bot belooft "binnen 4 werkdagen" (app setting
   `RESPONSE_TIME_TEXT`), net als de bevestiging die Robin stuurt. Pas je die in
   Robin aan, zet dan ook deze setting gelijk.

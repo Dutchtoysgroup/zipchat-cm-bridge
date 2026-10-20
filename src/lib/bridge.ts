@@ -4,7 +4,8 @@ import * as zipchat from "./zipchat";
 import * as cm from "./cm";
 import { sendEscalationMail } from "./notify";
 import { checkPresence } from "./presence";
-import { shopForChat, customerService } from "./shops";
+import { shopForChat, customerService, questionSubject, type Shop } from "./shops";
+import * as robin from "./robin";
 import { sendGraphMail } from "./graph";
 
 /* ------------------------------------------------------------- Escaleren */
@@ -231,6 +232,26 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     .filter(Boolean)
     .join("\n\n");
 
+  // 3a. Standaard: een Online-gesprek in Robin, zoals het contactformulier. Robin
+  // mailt het antwoord van de medewerker dan zelf. Let op: Robin citeert dit
+  // bericht onder dat antwoord, dus de klant leest het ook.
+  if (config.escalationTarget === "robin" && email) {
+    const viaRobin = await escalateViaRobin({
+      sessionId: session.id,
+      conversationId,
+      chatId,
+      hasConversation,
+      shop,
+      name: name ?? "NAAM NIET OPGEGEVEN",
+      email,
+      summary: input.summary ?? null,
+      waarschuwing,
+      transcript,
+    });
+    if (viaRobin) return viaRobin;
+    // Lukt Robin niet, dan alsnog via de router: liever een chatticket dan geen ticket.
+  }
+
   const payload: cm.TwoWayPayload = {
     chat: cmChat,
     conversationMessages: [cm.textMessage(transcript ? `${header}\n\n${transcript}` : header)],
@@ -353,6 +374,97 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     mocked: sent.mocked,
     message: mailHandoverMessage(),
   };
+}
+
+/**
+ * De doorzetting als Online-gesprek in Robin (src/lib/robin.ts). Geeft null
+ * terug als Robin het gesprek niet aannam; dan gaat het via de router.
+ */
+async function escalateViaRobin(p: {
+  sessionId: number;
+  conversationId: string;
+  chatId: string;
+  hasConversation: boolean;
+  shop: Shop | null;
+  name: string;
+  email: string;
+  summary: string | null;
+  waarschuwing: string | null;
+  transcript: string;
+}): Promise<EscalateResult | null> {
+  // De URL van de webshop bepaalt in welke Robin-webshop het gesprek landt.
+  const referrer = p.shop ? `https://www.${p.shop.domain}/` : "https://www.exittoys.com/";
+  const content = [
+    `Doorgezet door de AI-assistent in de chat van ${p.shop?.domain ?? "EXIT Toys"}${p.shop ? ` (${p.shop.country})` : ""}.`,
+    p.summary ? `Samenvatting: ${p.summary}` : null,
+    p.waarschuwing,
+    p.transcript ? `--- Gesprek ---\n\n${p.transcript}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const start = await robin.startConversation({
+    name: p.name,
+    email: p.email,
+    subject: questionSubject(p.shop),
+    content,
+    referrer,
+  });
+  await store.logEvent({
+    sessionId: p.sessionId,
+    direction: "bridge->cm",
+    kind: "escalate.to_robin",
+    ok: start.ok,
+    statusCode: start.status,
+    summary: start.ok
+      ? `Online-gesprek aangemaakt in Robin (${referrer}); Robin mailt het antwoord naar ${p.email}`
+      : `Online-gesprek in Robin aanmaken mislukt (${start.error}) — valt terug op de Conversational Router`,
+    payload: { referrer, guid: start.data?.guid },
+  });
+  if (!start.ok || !start.data) return null;
+  const guid = start.data.guid;
+
+  if (start.data.autoReply) {
+    const auto = await robin.addAutoMessage(guid, start.data.autoReply);
+    if (!auto.ok) {
+      await store.logEvent({
+        sessionId: p.sessionId,
+        direction: "bridge->cm",
+        kind: "escalate.robin_autoreply",
+        ok: false,
+        statusCode: auto.status,
+        summary: `Bevestiging niet in het Robin-gesprek gezet: ${auto.error}`,
+      });
+    }
+  }
+
+  // Zonder dit denkt Robin dat de klant nog op de site zit en zet hij het
+  // antwoord in de widget in plaats van in de mail.
+  const left = await robin.leaveSite(guid);
+  await store.logEvent({
+    sessionId: p.sessionId,
+    direction: "bridge->cm",
+    kind: "escalate.robin_left",
+    ok: left.ok,
+    summary: left.ok
+      ? "Bezoeker bij Robin afgemeld: het antwoord gaat per e-mail"
+      : `Afmelden bij Robin mislukt (${left.error}); het antwoord kan in de widget blijven hangen tot Robin het alsnog mailt`,
+  });
+
+  if (p.hasConversation) {
+    const flag = await zipchat.setEscalation(p.conversationId, false, p.chatId);
+    await store.logEvent({
+      sessionId: p.sessionId,
+      direction: "bridge->zipchat",
+      kind: "escalate.flagged",
+      ok: flag.ok,
+      statusCode: flag.status,
+      summary: flag.ok ? "Gesprek in Zipchat als geëscaleerd gemarkeerd" : `Markeren mislukt: ${flag.error}`,
+    });
+  }
+
+  await store.updateSession(p.sessionId, { cmChatId: `robin:${guid}`, status: "active" });
+  return { ok: true, sessionId: p.sessionId, mode: "email", mocked: start.mocked, message: mailHandoverMessage() };
 }
 
 /* --------------------------------------------- Agent-antwoord per e-mail naar de klant */

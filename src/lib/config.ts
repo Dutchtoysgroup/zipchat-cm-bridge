@@ -149,6 +149,22 @@ export const config = {
    * (dat is de klantenservice), maar per mail rechtstreeks naar marketing.
    */
   /**
+   * Waar een doorzetting heen gaat. "robin" (standaard): een Online-gesprek in
+   * Robin via het contactformulier, en Robin mailt het antwoord zelf
+   * (src/lib/robin.ts). "cm": als chat via de Conversational Router, en de
+   * bridge mailt het antwoord (handleAgentReply) — de terugval.
+   */
+  escalationTarget: opt("ESCALATION_TARGET") === "cm" ? ("cm" as const) : ("robin" as const),
+
+  robin: {
+    /**
+     * Sleutel van de Robin-widget. Die staat openbaar in de pagina van elke
+     * webshop (selfservice.robinhq.com/external/robin/<sleutel>.js); geen geheim.
+     */
+    apiKey: opt("ROBIN_API_KEY") ?? "5uzr3kmj",
+  },
+
+  /**
    * Antwoorden uit Robin gaan per e-mail naar de klant (src/lib/shops.ts).
    * Leeg = het info@-adres van het land; gezet = één afzender voor alles.
    */

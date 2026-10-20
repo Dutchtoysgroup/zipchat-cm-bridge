@@ -83,3 +83,21 @@ export function customerService(shop: Shop | null): { from: string; subject: str
   const s = (shop && SERVICE[shop.country]) ?? { from: "info@exittoys.com", lang: "en" };
   return { from: config.csMailFrom ?? s.from, subject: SUBJECT[s.lang] ?? SUBJECT.en };
 }
+
+const QUESTION: Record<string, string> = {
+  nl: "Je vraag aan EXIT Toys",
+  de: "Deine Frage an EXIT Toys",
+  fr: "Votre question à EXIT Toys",
+  da: "Dit spørgsmål til EXIT Toys",
+  sv: "Din fråga till EXIT Toys",
+  es: "Tu consulta a EXIT Toys",
+  it: "La tua domanda a EXIT Toys",
+  en: "Your question to EXIT Toys",
+  pl: "Twoje pytanie do EXIT Toys",
+};
+
+/** Onderwerp van het Robin-gesprek; de klant ziet het terug in de antwoordmail. */
+export function questionSubject(shop: Shop | null): string {
+  const lang = (shop && SERVICE[shop.country]?.lang) ?? "en";
+  return QUESTION[lang] ?? QUESTION.en;
+}

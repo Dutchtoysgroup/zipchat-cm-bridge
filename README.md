@@ -48,10 +48,11 @@ medewerker komen terug in dezelfde chatwidget.
 
 ## Hoe het loopt
 
-Sinds 20 oktober 2026 gaat elk antwoord van een medewerker **per e-mail** naar
-de klant. Live chat in het Zipchat-venster is eruit: de klant zit daar na een
-doorzetting meestal niet meer, en de antwoorden kwamen er toch nooit aan (zie
-[Controleren of CM antwoorden aflevert](#controleren-of-cm-antwoorden-aflevert)).
+Sinds 20 oktober 2026 wordt een doorzetting een **Online-gesprek in Robin**,
+precies zoals het contactformulier op de webshops dat maakt. De medewerker
+antwoordt in Robin en **Robin mailt dat antwoord zelf** naar de klant, vanuit het
+adres van de webshop (info@exittoys.nl, .de of .com). Een reactie van de klant
+komt in hetzelfde gesprek terug. Live chat in het Zipchat-venster is eruit.
 
 ```
 Klant ──▶ Zipchat-widget ──▶ AI kan het niet aan
@@ -59,33 +60,35 @@ Klant ──▶ Zipchat-widget ──▶ AI kan het niet aan
                               ▼  skill vraagt naam + e-mail
                         POST /api/zipchat/escalate
                               │
-                              ▼  transcript + land, AI blijft aan
-                    Conversational Router ──▶ Agent Inbox (Robin)
-                                                    │
-                                 medewerker antwoordt in het ticket
-                                                    │
-                              POST /api/cm/webhook ◀┘
+                              ▼  src/lib/robin.ts
+             contact.robinhq.com: Online-gesprek in de webshop van het land
                               │
-                              ▼  Microsoft Graph
-              mail naar de klant, vanuit info@ van het land
-              (reactie van de klant komt via dat adres in Robin)
+                 medewerker antwoordt in Robin
+                              │
+                              ▼
+            Robin mailt het antwoord naar de klant
 ```
 
-* **Afzender** per land in `src/lib/shops.ts`: NL/BE `info@exittoys.nl`,
-  DE/AT `info@exittoys.de`, de rest `info@exittoys.com`; `CS_MAIL_FROM` zet één
-  afzender voor alles. Het onderwerp staat in de taal van het land; de tekst is
-  die van de medewerker, als platte tekst. De mail komt ook in Verzonden items
-  van die mailbox.
-* **De Graph-app moet op die mailboxen mogen versturen.** Hij mag dat in
-  Exchange alleen op wat er is toegekend; mag het niet, dan staat er
-  `agent_reply.mail_failed` met `ErrorAccessDenied` in het logboek en krijgt de
-  klant niets. Controleren zonder iets te versturen: een `sendMail` zonder
-  ontvanger geeft 400 als het mag en 403 als het niet mag.
-* **Automatische berichten** uit Robin (afzender = een teamnaam, zoals het
-  WhatsApp-autobericht) gaan niet naar de klant; welke namen, staat in
-  `CM_SKIP_SENDERS` (standaard `WhatsApp`).
-* De pollketting hieronder draait alleen nog voor oude live-chatsessies; nieuwe
-  sessies zijn altijd e-mail en worden niet gepolld.
+* **Geen gedocumenteerde API.** De bridge doet wat Robins eigen widget doet
+  (uitgezocht op 20 okt 2026): `POST /Conversation/Start/` met header `apikey`,
+  daarna `AddAutoMessage` met de bevestiging, en een korte SignalR-verbinding
+  (`selfServiceHub.connectClient`) die meteen weer sluit. Zonder dat laatste
+  denkt Robin dat de klant nog op de site zit en zet hij het antwoord in de
+  widget in plaats van in de mail.
+* **Webshop per land** via de `Referrer`: Robin koppelt het begin van de URL aan
+  een webshop. NL/BE → EXIT Toys Nederland, DE/AT → Duitsland, FR → France,
+  ES/IT/PL → Spanje/Italië/Polen, DK/SE/UK/IE → International. De afzender van
+  de antwoordmail staat per webshop in Robin.
+* **De klant leest mee.** Robin citeert het eerste bericht onder elk antwoord:
+  de samenvatting en het gesprek staan dus ook in de mail aan de klant.
+* **Onderwerp** in de taal van het land (`questionSubject` in `src/lib/shops.ts`).
+* **Terugval.** Neemt Robin het gesprek niet aan, of staat
+  `ESCALATION_TARGET=cm`, dan gaat het als chat via de Conversational Router en
+  mailt de bridge het antwoord zelf via Microsoft Graph (`handleAgentReply`).
+  Daarvoor moet de Graph-app op de info@-mailboxen mogen versturen; dat mag hij
+  nu niet (alleen marketing@). Automatische teamberichten
+  (`CM_SKIP_SENDERS`, standaard `WhatsApp`) gaan dan niet mee.
+* De pollketting hieronder draait alleen nog voor oude live-chatsessies.
 
 ### Pollketting en vangnet
 

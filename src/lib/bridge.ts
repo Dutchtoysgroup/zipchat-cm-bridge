@@ -481,7 +481,7 @@ async function pollableSessions(): Promise<Session[]> {
 export const LAST_POLL_KEY = "poll_last_run";
 
 /**
- * Sessies in WhatsApp-modus (`email`) worden nooit gepolld: de klant praat
+ * Sessies in e-mailmodus (`email`) worden nooit gepolld: de klant praat
  * gewoon door met de AI. Daardoor sloot de stiltetimer van de poller ze ook
  * nooit en bleven ze voor altijd "actief". Nu sluiten ze na dezelfde stilte
  * als een live chat. Een later antwoord uit CM vindt de sessie nog steeds.
@@ -493,7 +493,7 @@ export async function closeIdleEmailSessions(): Promise<number> {
     await store.logEvent({
       direction: "internal",
       kind: "poll.closed_email_sessions",
-      summary: `${n} WhatsApp-sessie(s) gesloten na ${config.poll.idleTimeoutMin} min stilte`,
+      summary: `${n} e-mailsessie(s) gesloten na ${config.poll.idleTimeoutMin} min stilte`,
     });
   }
   return n;

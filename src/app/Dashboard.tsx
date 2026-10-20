@@ -97,7 +97,7 @@ const KOP: Record<View, { titel: string; sub: string }> = {
 const MODE_LABEL: Record<"auto" | "livechat" | "email", string> = {
   auto: "Automatisch",
   livechat: "Altijd live chat",
-  email: "Altijd WhatsApp",
+  email: "Altijd per e-mail",
 };
 
 function Icon({ children }: { children: React.ReactNode }) {
@@ -231,7 +231,7 @@ export default function Dashboard({ user }: { user: string | null }) {
         const uitleg: Record<string, string> = {
           auto: `Modus: automatisch. Mobile Service Cloud bepaalt het — op dit moment ${data.live ? "wél" : "géén"} live chat.`,
           livechat: "Modus: live chat vastgezet. Elke escalatie belooft een medewerker in de chat.",
-          email: "Modus: e-mail vastgezet. Elke escalatie verwijst naar WhatsApp.",
+          email: "Modus: e-mail vastgezet. Elke escalatie gaat als ticket naar CM; de klant krijgt antwoord per e-mail.",
         };
         setResult({ ok: true, text: uitleg[next] });
       } else {
@@ -324,7 +324,7 @@ export default function Dashboard({ user }: { user: string | null }) {
               {!compact && <td>{s.channel}</td>}
               <td>
                 <span className={`status ${s.mode === "livechat" ? "ok" : ""}`}>
-                  {s.mode === "livechat" ? "live chat" : "WhatsApp"}
+                  {s.mode === "livechat" ? "live chat" : "e-mail"}
                 </span>
               </td>
               <td>
@@ -450,7 +450,7 @@ export default function Dashboard({ user }: { user: string | null }) {
                     <Icon>{VIEWS[1].icon}</Icon>
                   </span>
                   <strong>{health?.openSessions ?? "—"}</strong>
-                  <small>WhatsApp-gesprekken sluiten na een uur stilte</small>
+                  <small>Gesprekken zonder live chat sluiten na een uur stilte</small>
                 </div>
                 <div className="cijfer">
                   <span className="cijfer-label">
@@ -460,7 +460,7 @@ export default function Dashboard({ user }: { user: string | null }) {
                       <path d="M4 21a8 8 0 0 1 16 0" />
                     </Icon>
                   </span>
-                  <strong>{live === null ? "—" : live ? "Live chat" : "WhatsApp"}</strong>
+                  <strong>{live === null ? "—" : live ? "Live chat" : "Per e-mail"}</strong>
                   <small>{mode ? (mode === "auto" ? "Automatisch, via MSC" : "Handmatig vastgezet") : "Wordt geladen"}</small>
                 </div>
                 <div className="cijfer">
@@ -501,7 +501,7 @@ export default function Dashboard({ user }: { user: string | null }) {
                             : mode === "livechat"
                               ? "Handmatig vastgezet: elke escalatie belooft een medewerker in de chat, ook als MSC offline meldt."
                               : mode === "email"
-                                ? "Handmatig vastgezet: elke escalatie verwijst naar WhatsApp, ook als er wél iemand beschikbaar is."
+                                ? "Handmatig vastgezet: elke escalatie gaat als ticket naar CM en de klant krijgt antwoord per e-mail, ook als er wél iemand beschikbaar is."
                                 : "Wordt geladen…"}
                         </p>
                       </div>

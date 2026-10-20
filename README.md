@@ -231,13 +231,13 @@ Maak in de Conversational Router een **TwoWay-adapter** aan en vul het formulier
 |---|---|
 | Name | bijv. `Zipchat bridge` |
 | **Is Bot** | **uit** — Zipchat is de bot en staat buiten de router; deze adapter is de kanaalkant |
-| Message Endpoint › Url | `https://<jouw-deploy>/api/cm/webhook` |
+| Message Endpoint › Url | `https://dtg-zipchat-cm-bridge-weu.azurewebsites.net/api/cm/webhook` |
 | Message Endpoint › Method | `POST` |
 | Message Endpoint › Add header | naam `X-Bridge-Token`, waarde = je `CM_WEBHOOK_SECRET` |
-| Hand Over Endpoint › Url | `https://<jouw-deploy>/api/cm/handover` |
+| Hand Over Endpoint › Url | `https://dtg-zipchat-cm-bridge-weu.azurewebsites.net/api/cm/handover` |
 | Hand Over Endpoint › Body | de standaardwaarde laten staan |
 | Hand Over Endpoint › Add header | dezelfde `X-Bridge-Token` |
-| Event Endpoint › Url | `https://<jouw-deploy>/api/cm/event?token=<CM_WEBHOOK_SECRET>` |
+| Event Endpoint › Url | `https://dtg-zipchat-cm-bridge-weu.azurewebsites.net/api/cm/event?token=<CM_WEBHOOK_SECRET>` |
 
 Na opslaan krijg je de adapter-URL in de vorm
 `https://api.conversational.cm.com/conversational/twoway/v2/accounts/{technicalLinkId}/adapters/{adapterId}`.
@@ -287,6 +287,20 @@ herkenning in `isAssigned()` daarop aan.
 Een lege placeholder levert ongeldige JSON op (`"context":}`). De bridge
 repareert dat en logt anders de ruwe body, in plaats van een 400 terug te geven
 waar je niets aan hebt.
+
+### Controleren of CM antwoorden aflevert
+
+Staat in het dashboard "Laatste CM-webhook" op "Geen" terwijl medewerkers in
+Robin wel in de chat antwoorden, dan komen die antwoorden niet bij de bridge
+en dus ook niet bij de klant. Robin toont ze toch als verzonden. Zo ging het
+van 21 september tot 20 oktober 2026: bij de verhuizing naar Azure bleven de
+endpoints van de adapter op het oude Vercel-adres staan, dat 404 gaf. Zet na
+elke verhuizing of rotatie van `CM_WEBHOOK_SECRET` de drie endpoints hierboven
+opnieuw, en kijk daarna of er een `webhook.received` in het logboek verschijnt.
+
+Een antwoord in de chat komt ook in **e-mailmodus** bij de klant: de bridge
+neemt het gesprek dan over (AI op pauze) en laat het verder als live chat
+lopen.
 
 ### Over het Hand Over Endpoint
 

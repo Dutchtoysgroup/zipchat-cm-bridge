@@ -415,20 +415,46 @@ export async function handleAgentReply(payload: cm.TwoWayPayload): Promise<{ ok:
     return { ok: false, delivered: 0, message: "Onbekende chat — geen gekoppelde Zipchat-sessie." };
   }
 
-  if (session.mode === "email") {
+  // Zonder Zipchat-gesprek is er geen chatvenster om het antwoord in te zetten.
+  if (session.zipchatConversationId.startsWith("zonder-id-")) {
     const preview = cm.extractInboundTexts(payload).join(" | ").slice(0, 120);
     await store.logEvent({
       sessionId: session.id,
       direction: "cm->bridge",
-      kind: "agent_reply.email_mode",
-      summary: `Antwoord in e-mailmodus, niet in de chat gezet: "${preview}"`,
+      kind: "agent_reply.no_conversation",
+      ok: false,
+      summary: `Antwoord niet af te leveren, er is geen Zipchat-gesprek bij: "${preview}" — beantwoord de klant per e-mail`,
       payload,
     });
-    return {
-      ok: true,
-      delivered: 0,
-      message: "E-mailmodus: dit gesprek loopt niet live, beantwoord de klant per e-mail.",
-    };
+    return { ok: false, delivered: 0, message: "Geen chatgesprek bekend; beantwoord de klant per e-mail." };
+  }
+
+  // Een sessie in e-mailmodus heeft de AI nog aan. Antwoordt een medewerker
+  // toch in de chat, dan neemt hij het gesprek daarmee over: de AI gaat op
+  // pauze (Zipchat weigert een handmatig bericht zolang de AI het gesprek
+  // heeft) en vanaf nu gaan de berichten van de klant naar CM. Tot 20 okt
+  // 2026 gooide de bridge zo'n antwoord weg, terwijl Robin het als verzonden
+  // toonde: de klant kreeg niets.
+  if (session.mode === "email") {
+    const assigneeId = Number(config.zipchat.senderId);
+    const takeover = await zipchat.setAssignment(
+      session.zipchatConversationId,
+      Number.isFinite(assigneeId) ? assigneeId : 0,
+      session.zipchatChatId,
+    );
+    await store.logEvent({
+      sessionId: session.id,
+      direction: "bridge->zipchat",
+      kind: "agent_reply.takeover",
+      ok: takeover.ok,
+      statusCode: takeover.status,
+      summary: takeover.ok
+        ? "Medewerker antwoordt in de chat: AI gepauzeerd, gesprek loopt nu als live chat"
+        : `Overnemen mislukt, antwoord komt mogelijk niet aan: ${takeover.error}`,
+    });
+    // Klantberichten vanaf nu doorsturen, niet wat de klant daarvoor met de AI
+    // besprak: dat hoort niet in het ticket.
+    await store.updateSession(session.id, { mode: "livechat", status: "active", lastForwardedAt: new Date() });
   }
 
   const texts = cm.extractInboundTexts(payload);

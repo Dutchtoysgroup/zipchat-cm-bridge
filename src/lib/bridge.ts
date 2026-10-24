@@ -38,13 +38,12 @@ export type ModeSetting = HandoverMode | "auto";
 
 export const MODE_KEY = "handover_mode";
 
-/** De instelling uit het dashboard. Standaard "livechat". */
+/** De instelling uit het dashboard. Standaard "auto", zoals HALO het doet. */
 export async function getModeSetting(): Promise<ModeSetting> {
   const v = await store.getSetting(MODE_KEY);
   if (v === "livechat" || v === "email" || v === "auto") return v;
-  // Sinds de router-koppeling werkt is live chat de normale gang van zaken;
-  // een lege database mag daar niet stilletjes van afwijken.
-  return "livechat";
+  // Live chat beloven terwijl er niemand zit, is erger dan een mail beloven.
+  return "auto";
 }
 
 export async function setMode(mode: ModeSetting): Promise<void> {
@@ -97,12 +96,21 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   const shop = await shopForChat(chatId);
   const channel: Channel = input.channel ?? "webchat";
   let hasConversation = !!input.conversationId;
-  // Sinds 20 okt 2026 gaat het antwoord van de medewerker altijd per e-mail
-  // naar de klant (handleAgentReply). De AI blijft in de chat; er is geen live
-  // chat meer, en dus ook geen beschikbaarheidscheck.
-  const setting: HandoverMode = "email";
+  // Zoals HALO: is er in Mobile Service Cloud iemand online, dan wordt het een
+  // live chat in Robin en antwoordt de medewerker in dit chatvenster. Anders
+  // een Online-gesprek, en dan mailt Robin het antwoord.
+  const availability = await resolveLiveAvailability();
+  const setting: HandoverMode = availability.live ? "livechat" : "email";
+  if (availability.presence) {
+    await store.logEvent({
+      direction: "internal",
+      kind: "presence.checked",
+      summary: `Mobile Service Cloud meldt: ${availability.presence.raw || "(leeg)"} → ${availability.live ? "live chat" : "geen live chat"}`,
+    });
+  }
 
-  // Naam en e-mailadres zijn altijd verplicht: het antwoord gaat naar dat adres.
+  // Naam en e-mailadres zijn altijd verplicht, ook bij live chat: loopt de
+  // klant weg voordat er antwoord is, dan mailt de medewerker hem vanuit Robin.
   const bezwaar = valideerKlantgegevens(input.name, input.email);
   if (bezwaar) {
     await store.logEvent({
@@ -112,7 +120,6 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     });
     return { ok: true, mode: setting, message: `${needDetailsMessage()}\n\n${bezwaar}` };
   }
-  const mode: HandoverMode = "email";
 
   // 1. Het gesprek ophalen bij Zipchat. Het transcript is wat de klantenservice
   // leest; zonder transcript staat er in Robin bijna niets.
@@ -171,11 +178,19 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
       sessionId: existing.id,
       cmChatId: existing.cmChatId ?? undefined,
       mode: existing.mode as HandoverMode,
-      message: mailHandoverMessage(),
+      message:
+        existing.mode === "livechat"
+          ? "Dit gesprek staat al bij een collega; zeg dat een collega het al heeft opgepakt en zo in dit chatvenster reageert."
+          : mailHandoverMessage(),
     };
   }
 
   const transcriptOk = conv.ok;
+  // Live chat kan alleen met een echt Zipchat-gesprek: daar komt het antwoord
+  // van de medewerker in. Zonder gesprek wordt het een Online-gesprek, en dat
+  // moet ook zo in de administratie staan, niet alleen in de belofte.
+  const liveChat = setting === "livechat" && hasConversation && transcriptOk;
+  const mode: HandoverMode = liveChat ? "livechat" : "email";
   const messages = conv.data?.messages ?? [];
   // Het hele gesprek gaat mee naar het ticket, niet alleen de samenvatting van
   // de assistent: de medewerker moet kunnen lezen wat de klant echt zei.
@@ -216,11 +231,14 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     payload: { conversationId, chatId, shop: shop?.domain, reason: input.reason, messages: messages.length, hasConversation },
   });
 
-  // 3. Context + transcript als één openingsbericht naar de router. De AI blijft
-  // in de chat; de medewerker antwoordt hier en de bridge mailt dat door.
-  const instructie = email
-    ? `Je antwoord in dit gesprek gaat per e-mail naar de klant (${email}).`
-    : null;
+  // 3. Context + transcript als één openingsbericht naar de router. Bij live
+  // chat komt het antwoord in het chatvenster; anders mailt de bridge het door
+  // (alleen als de router de terugval is voor een Online-gesprek).
+  const instructie = liveChat
+    ? `LIVE CHAT — de klant zit nu in de chat te wachten. Antwoord hier; je bericht komt direct in het chatvenster. Is de klant weg, mail hem dan vanuit Robin op ${email ?? "zijn e-mailadres"}.`
+    : email
+      ? `Je antwoord in dit gesprek gaat per e-mail naar de klant (${email}).`
+      : null;
 
   // Blokken worden gescheiden door een lege regel; binnen een blok staan de
   // regels onder elkaar. Robin toont het ticket als platte tekst, dus die
@@ -253,10 +271,10 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     .filter(Boolean)
     .join("\n\n");
 
-  // 3a. Standaard: een Online-gesprek in Robin, zoals het contactformulier. Robin
-  // mailt het antwoord van de medewerker dan zelf. Let op: Robin citeert dit
-  // bericht onder dat antwoord, dus de klant leest het ook.
-  if (config.escalationTarget === "robin" && email) {
+  // 3a. Geen live chat: een Online-gesprek in Robin, zoals het contactformulier.
+  // Robin mailt het antwoord van de medewerker dan zelf. Let op: Robin citeert
+  // dit bericht onder dat antwoord, dus de klant leest het ook.
+  if (!liveChat && config.escalationTarget === "robin" && email) {
     const viaRobin = await escalateViaRobin({
       sessionId: session.id,
       conversationId,
@@ -271,6 +289,21 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     });
     if (viaRobin) return viaRobin;
     // Lukt Robin niet, dan alsnog via de router: liever een chatticket dan geen ticket.
+  }
+
+  // 3b. Live chat: de AI op pauze, zodat hij niet door de medewerker heen praat.
+  // Zipchat weigert een handmatig bericht zolang de AI het gesprek heeft.
+  if (liveChat) {
+    const assigneeId = Number(config.zipchat.senderId);
+    const pause = await zipchat.setAssignment(conversationId, Number.isFinite(assigneeId) ? assigneeId : 0, chatId);
+    await store.logEvent({
+      sessionId: session.id,
+      direction: "bridge->zipchat",
+      kind: "escalate.pause_ai",
+      ok: pause.ok,
+      statusCode: pause.status,
+      summary: pause.ok ? "AI gepauzeerd: de medewerker neemt het chatvenster over" : `AI pauzeren mislukt: ${pause.error}`,
+    });
   }
 
   const payload: cm.TwoWayPayload = {
@@ -355,7 +388,6 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     chatId: realChatId,
     name,
     email,
-    referrer: "Zipchat",
   });
   await store.logEvent({
     sessionId: session.id,
@@ -393,7 +425,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     cmChatId: realChatId,
     mode,
     mocked: sent.mocked,
-    message: mailHandoverMessage(),
+    message: liveChat ? liveHandoverMessage() : mailHandoverMessage(),
   };
 }
 
@@ -493,14 +525,14 @@ async function escalateViaRobin(p: {
   return { ok: true, sessionId: p.sessionId, mode: "email", mocked: start.mocked, message: mailHandoverMessage() };
 }
 
-/* --------------------------------------------- Agent-antwoord per e-mail naar de klant */
+/* --------------------------------------------- Agent-antwoord naar de klant */
 
 /**
- * Een medewerker antwoordt in Robin. Dat antwoord gaat altijd per e-mail naar
- * de klant, vanuit de klantenservice van het land, en nooit in de Zipchat-chat:
- * de klant zit daar na een doorzetting meestal allang niet meer, en de AI blijft
- * er gewoon aan. Een reactie van de klant komt via het antwoordadres in Robin
- * binnen.
+ * Een medewerker antwoordt in Robin. Bij een live chat komt dat antwoord in
+ * het Zipchat-venster, zoals bij HALO; de AI staat dan op pauze. Bij een
+ * gesprek dat als ticket via de router ging (de terugval van een
+ * Online-gesprek) mailt de bridge het antwoord vanuit de klantenservice van het
+ * land; de AI blijft daar aan.
  */
 export async function handleAgentReply(payload: cm.TwoWayPayload): Promise<{ ok: boolean; delivered: number; message: string }> {
   const cmChatId = payload?.chat?.id;
@@ -550,6 +582,8 @@ export async function handleAgentReply(payload: cm.TwoWayPayload): Promise<{ ok:
     return { ok: true, delivered: 0, message: `Bericht van ${sender} overgeslagen.` };
   }
 
+  if (session.mode === "livechat") return deliverToWidget(session, texts, sender);
+
   const to = session.customerEmail?.trim();
   if (!to) {
     await store.logEvent({
@@ -589,6 +623,36 @@ export async function handleAgentReply(payload: cm.TwoWayPayload): Promise<{ ok:
     delivered: mail.ok ? 1 : 0,
     message: mail.ok ? `Per e-mail naar de klant gestuurd.` : `Mailen mislukt: ${mail.error}`,
   };
+}
+
+/** Live chat: het antwoord van de medewerker in het Zipchat-venster zetten. */
+async function deliverToWidget(
+  session: Session,
+  texts: string[],
+  sender: string | null,
+): Promise<{ ok: boolean; delivered: number; message: string }> {
+  let delivered = 0;
+  for (const text of texts) {
+    const res = await zipchat.sendManualReply(session.zipchatConversationId, text, { chatId: session.zipchatChatId });
+    await store.logEvent({
+      sessionId: session.id,
+      direction: "bridge->zipchat",
+      kind: "agent_reply.delivered",
+      ok: res.ok,
+      statusCode: res.status,
+      summary: res.ok
+        ? `Antwoord${sender ? ` van ${sender}` : ""} in het chatvenster gezet: "${truncate(text)}"`
+        : `Antwoord NIET in het chatvenster gezet (${res.error}). Mail de klant vanuit Robin${session.customerEmail ? ` op ${session.customerEmail}` : ""}: "${truncate(text)}"`,
+      payload: { text },
+    });
+    if (res.ok) delivered++;
+  }
+  await store.updateSession(session.id, {
+    lastAgentReplyAt: new Date(),
+    status: "active",
+    ...(sender ? { agentName: sender } : {}),
+  });
+  return { ok: delivered > 0, delivered, message: `${delivered} van ${texts.length} bericht(en) in de chat gezet.` };
 }
 
 /* --------------------------------------- Klantberichten pollen (Zipchat heeft geen webhook) */
@@ -921,10 +985,21 @@ function mailHandoverMessage(): string {
   ].join("\n");
 }
 
+/** Live chat: wat HALO zei ("U wordt zo geholpen door een van onze collega's!"). */
+function liveHandoverMessage(): string {
+  return [
+    "Geef de klant dit antwoord, getrouw vertaald naar de taal van het gesprek:",
+    "",
+    "Je wordt zo geholpen door een van onze collega's, hier in dit chatvenster. Houd het venster open.",
+    "",
+    "Beantwoord de doorgezette vraag daarna niet meer zelf; je collega neemt het over.",
+  ].join("\n");
+}
+
 /** Wat de bot moet doen als er gegevens ontbreken. */
 function needDetailsMessage(): string {
   return [
-    "Ik heb nog gegevens nodig: het antwoord van de collega komt per e-mail.",
+    "Ik heb nog gegevens nodig om de klant door te zetten naar een collega.",
     "Vraag de klant om zijn naam en e-mailadres, en roep deze tool daarna opnieuw aan met die gegevens erbij.",
     "Zeg nog niet dat het gesprek is doorgezet.",
   ].join("\n");

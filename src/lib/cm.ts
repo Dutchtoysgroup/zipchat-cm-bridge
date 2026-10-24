@@ -252,7 +252,7 @@ export async function requestHandoverMutation(params: {
     chatId: params.chatId,
     Context: {
       RoutingKeywords: "",
-      WebStoreReferrer: params.referrer ?? "Zipchat",
+      WebStoreReferrer: params.referrer ?? config.cm.webStoreReferrer,
       // CustomerInfo is een JSON-string binnen de JSON, precies zoals HALO het stuurt.
       CustomerInfo: JSON.stringify({ name: params.name ?? "", email: params.email ?? "" }),
     },

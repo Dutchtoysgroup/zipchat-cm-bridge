@@ -48,11 +48,36 @@ medewerker komen terug in dezelfde chatwidget.
 
 ## Hoe het loopt
 
-Sinds 20 oktober 2026 wordt een doorzetting een **Online-gesprek in Robin**,
-precies zoals het contactformulier op de webshops dat maakt. De medewerker
-antwoordt in Robin en **Robin mailt dat antwoord zelf** naar de klant, vanuit het
-adres van de webshop (info@exittoys.nl, .de of .com). Een reactie van de klant
-komt in hetzelfde gesprek terug. Live chat in het Zipchat-venster is eruit.
+Sinds 24 oktober 2026 precies zoals HALO (Tobi) het deed. Bij elke doorzetting
+vraagt de bridge eerst aan Mobile Service Cloud of er iemand online is (dezelfde
+presence-check als HALO):
+
+* **Online → live chat.** Het gesprek gaat via de Conversational Router als chat
+  naar Robin, in de webshop **HALO Livechat** (`WebStoreReferrer`, app setting
+  `CM_WEBSTORE_REFERRER`, standaard `HALO`), waar ook de chats van Tobi binnenkomen.
+  De AI gaat in Zipchat op pauze; de medewerker antwoordt in Robin en dat
+  antwoord staat binnen een paar seconden in het chatvenster, als "EXIT Toys
+  Klantenservice". Wat de klant daarna typt, gaat via de pollketting naar Robin.
+  Loopt de klant weg, dan mailt de medewerker hem vanuit Robin; het e-mailadres
+  staat bovenaan het gesprek.
+* **Offline → Online-gesprek.** Zoals de offline-overdracht van HALO: een
+  Online-gesprek in Robin, precies zoals het contactformulier op de webshops dat
+  maakt. De medewerker antwoordt in Robin en **Robin mailt dat antwoord zelf**
+  naar de klant, vanuit het adres van de webshop (info@exittoys.nl, .de of .com).
+  Een reactie van de klant komt in hetzelfde gesprek terug.
+
+Op het dashboard staat dit onder **Bemensing** op Automatisch; daar kun je ook
+altijd live chat of altijd e-mail vastzetten. Zonder Zipchat-gesprek-id kan er
+geen live chat zijn (er is geen venster om het antwoord in te zetten); dan wordt
+het altijd een Online-gesprek.
+
+Waarom het tussen 20 en 24 oktober alleen per e-mail ging: tot 20 oktober kwamen
+antwoorden uit Robin nooit aan, omdat de routerregel Robin → Zipchat bridge
+ontbrak en de adapter-endpoints nog naar Vercel wezen. Na die reparatie is de
+hele keten los getest: antwoord uit Robin bij de bridge (20 okt), en een bericht
+via de Zipchat-API in een echt chatvenster op exittoys.nl (24 okt).
+
+Hieronder de offline-route:
 
 ```
 Klant ──▶ Zipchat-widget ──▶ AI kan het niet aan
@@ -97,7 +122,7 @@ Klant ──▶ Zipchat-widget ──▶ AI kan het niet aan
   Daarvoor moet de Graph-app op de info@-mailboxen mogen versturen; dat mag hij
   nu niet (alleen marketing@). Automatische teamberichten
   (`CM_SKIP_SENDERS`, standaard `WhatsApp`) gaan dan niet mee.
-* De pollketting hieronder draait alleen nog voor oude live-chatsessies.
+* De pollketting hieronder draait voor live-chatsessies.
 
 ### Pollketting en vangnet
 

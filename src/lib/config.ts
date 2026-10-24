@@ -67,6 +67,13 @@ export const config = {
     productToken: opt("CM_PRODUCT_TOKEN"),
     /** Kanaalnaam die CM in het chat-object verwacht. */
     channel: opt("CM_CHANNEL") ?? "CXWebConversations",
+    /**
+     * WebStoreReferrer bij de handover van een live chat. Robin kiest daarmee
+     * de webshop: "HALO" geeft "HALO Livechat", waar ook de chats van Tobi
+     * (HALO) binnenkomen. Een onbekende waarde valt in EXIT Toys Nederland,
+     * met het WhatsApp-autobericht van die webshop erbij.
+     */
+    webStoreReferrer: opt("CM_WEBSTORE_REFERRER") ?? "HALO",
     /** stateNameId van de agent-state in de router (handover naar mens). */
     agentStateNameId: opt("CM_AGENT_STATE_NAME_ID"),
     /** stateNameId om terug te zetten naar de bot, indien gebruikt. */
@@ -149,10 +156,11 @@ export const config = {
    * (dat is de klantenservice), maar per mail rechtstreeks naar marketing.
    */
   /**
-   * Waar een doorzetting heen gaat. "robin" (standaard): een Online-gesprek in
-   * Robin via het contactformulier, en Robin mailt het antwoord zelf
-   * (src/lib/robin.ts). "cm": als chat via de Conversational Router, en de
-   * bridge mailt het antwoord (handleAgentReply) — de terugval.
+   * Waar een doorzetting heen gaat als er géén live chat is. "robin"
+   * (standaard): een Online-gesprek in Robin via het contactformulier, en Robin
+   * mailt het antwoord zelf (src/lib/robin.ts). "cm": als chat via de
+   * Conversational Router, en de bridge mailt het antwoord (handleAgentReply).
+   * Een live chat gaat altijd via de router, net als bij HALO.
    */
   escalationTarget: opt("ESCALATION_TARGET") === "cm" ? ("cm" as const) : ("robin" as const),
 

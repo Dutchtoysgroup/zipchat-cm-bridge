@@ -5,6 +5,11 @@ Use this tool for questions such as "where is my parcel", "where's my order",
 "when will it be delivered", "what's the status of my order", "my order hasn't
 arrived yet", "tracking number", "has my order been dispatched yet".
 
+This is the FALLBACK ROUTE. For an order question, first use the skill
+"Look up orders with an email code": for that, the customer only needs their
+email address. Only use this tool if the customer does not receive the code or
+does not want to use it, or if there are no orders under their email address.
+
 This tool returns personal order details. So only call it once you have all
 four details: together they form the verification.
 </task>

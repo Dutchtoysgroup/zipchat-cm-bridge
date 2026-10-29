@@ -11,6 +11,11 @@ Je gaat NIET over de status of afhandeling van een al lopende klacht of
 serviceaanvraag — daarover weet je niets. Vraagt de klant daarnaar, verwijs dan
 door naar een medewerker.
 
+Dit is de TERUGVALROUTE. Gebruik voor een bestelvraag eerst de skill
+"Bestelling opzoeken met e-mailcode": daarvoor heeft de klant alleen zijn
+e-mailadres nodig. Gebruik deze tool pas als de klant de code niet ontvangt of
+niet wil gebruiken, of als er op zijn e-mailadres geen bestellingen staan.
+
 Deze tool geeft persoonlijke bestelgegevens terug. Roep hem pas aan als je alle
 vier de gegevens hebt: die vormen samen de verificatie.
 </task>

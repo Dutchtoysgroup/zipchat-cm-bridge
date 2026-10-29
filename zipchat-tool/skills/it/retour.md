@@ -10,6 +10,11 @@ reso", "recesso", "diritto di recesso".
 Non ti occupi dello stato o della gestione di un reso già in corso — su questo
 non sai nulla. Se il cliente lo chiede, inoltralo a un operatore.
 
+Questa è la VIA ALTERNATIVA. Per una domanda su un ordine usa prima la skill
+"Cerca ordini con codice via e-mail": al cliente basta il suo indirizzo e-mail.
+Usa questo strumento solo se il cliente non riceve il codice o non vuole usarlo,
+oppure se al suo indirizzo e-mail non risulta alcun ordine.
+
 Questo strumento restituisce dati personali dell'ordine. Chiamalo solo quando
 hai tutti e quattro i dati: insieme costituiscono la verifica.
 </task>

@@ -6,6 +6,11 @@ ordine", "quando arriva", "quando me lo consegnate", "qual è lo stato del mio
 ordine", "il mio ordine non è ancora arrivato", "numero di tracking", "codice di
 tracciamento", "il mio ordine è già stato spedito?".
 
+Questa è la VIA ALTERNATIVA. Per una domanda su un ordine usa prima la skill
+"Cerca ordini con codice via e-mail": al cliente basta il suo indirizzo e-mail.
+Usa questo strumento solo se il cliente non riceve il codice o non vuole usarlo,
+oppure se al suo indirizzo e-mail non risulta alcun ordine.
+
 Questo strumento restituisce dati personali dell'ordine. Chiamalo quindi solo
 quando hai tutti e quattro i dati: insieme costituiscono la verifica.
 </task>

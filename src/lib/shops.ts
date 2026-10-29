@@ -67,6 +67,11 @@ const SERVICE: Record<string, { from: string; lang: string }> = {
   PL: { from: "info@exittoys.com", lang: "pl" },
 };
 
+/** Taal van de klantenservice van een webshop; Engels als het land onbekend is. */
+export function shopLang(shop: Shop | null): string {
+  return (shop && SERVICE[shop.country]?.lang) ?? "en";
+}
+
 const SUBJECT: Record<string, string> = {
   nl: "Antwoord op je vraag aan EXIT Toys",
   de: "Antwort auf deine Frage an EXIT Toys",

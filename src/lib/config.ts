@@ -152,6 +152,33 @@ export const config = {
   },
 
   /**
+   * E-mailverificatie voor bestelvragen (src/lib/verify.ts). Een eigen
+   * app-registratie ("Zipchat"), los van die van het dataplatform: die heeft
+   * geen tenant-brede Mail.Send, en mag via Exchange RBAC for Applications
+   * alléén vanuit noreply@exittoys.com versturen. Elke andere mailbox geeft 403.
+   */
+  verifyGraph: {
+    tenantId: opt("VERIFY_GRAPH_TENANT_ID"),
+    clientId: opt("VERIFY_GRAPH_CLIENT_ID"),
+    clientSecret: opt("VERIFY_GRAPH_CLIENT_SECRET"),
+    sender: opt("VERIFY_MAIL_FROM") ?? "noreply@exittoys.com",
+    get configured(): boolean {
+      return !!this.tenantId && !!this.clientId && !!this.clientSecret && !!this.sender;
+    },
+  },
+
+  /**
+   * De order-API's van de webshop (Dicode), dezelfde als in HALO-tools 16 en
+   * 26. Bij de e-mailverificatie roept de bridge ze aan, niet de assistent: zo
+   * krijgt de assistent bestellingen op e-mailadres alleen na een goede code.
+   */
+  exitOrders: {
+    baseUrl: (opt("EXIT_ORDER_API_URL") ?? "https://www.exittoys.com").replace(/\/+$/, ""),
+    orderAuth: opt("EXIT_ORDER_API_AUTH"),
+    trackingAuth: opt("EXIT_TRACKING_API_AUTH"),
+  },
+
+  /**
    * Influencer- en samenwerkingsaanvragen. Die gaan bewust niet via CM/Robin
    * (dat is de klantenservice), maar per mail rechtstreeks naar marketing.
    */

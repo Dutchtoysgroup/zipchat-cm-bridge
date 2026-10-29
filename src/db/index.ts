@@ -26,6 +26,13 @@ export interface Store {
   listOpenSessions(): Promise<Session[]>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
+  deleteSetting(key: string): Promise<void>;
+  /**
+   * Zet `next` alleen als de huidige waarde nog `expected` is (null = er is nog
+   * geen rij). Zo kunnen twee gelijktijdige pogingen op een e-mailcode niet
+   * allebei dezelfde teller ophogen. true = gezet.
+   */
+  compareAndSetSetting(key: string, expected: string | null, next: string): Promise<boolean>;
   /**
    * Id van het laatste Zipchat-bericht van deze sessie dat al bij CM ligt: in
    * het openingsticket of los doorgestuurd. De poller stuurt alleen wat erna
@@ -73,6 +80,13 @@ export interface Store {
  * bewaartermijn ruimt ze op.
  */
 const CURSOR_PREFIX = "forward_cursor:";
+
+/**
+ * E-mailverificatie (src/lib/verify.ts), ook in bridge_settings: de lopende
+ * code per e-mailadres, en een geslaagde verificatie per token. De dagelijkse
+ * opschoning haalt ze na een dag weg; geldig zijn ze veel korter.
+ */
+export const VERIFY_PREFIXES = ["otp:", "otpok:", "otprate:"] as const;
 
 /** Gebruikte SSO-tickets, ook in bridge_settings. Een ticket leeft 2 minuten. */
 const ONCE_PREFIX = "sso_jti:";
@@ -211,6 +225,26 @@ class PgStore implements Store {
       .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } });
   }
 
+  async deleteSetting(key: string) {
+    await this.db.delete(settings).where(eq(settings.key, key));
+  }
+
+  async compareAndSetSetting(key: string, expected: string | null, next: string) {
+    const rows =
+      expected === null
+        ? await this.db
+            .insert(settings)
+            .values({ key, value: next })
+            .onConflictDoNothing()
+            .returning({ key: settings.key })
+        : await this.db
+            .update(settings)
+            .set({ value: next, updatedAt: new Date() })
+            .where(and(eq(settings.key, key), eq(settings.value, expected)))
+            .returning({ key: settings.key });
+    return rows.length > 0;
+  }
+
   async getForwardCursor(sessionId: number) {
     return parseCursor(await this.getSetting(`${CURSOR_PREFIX}${sessionId}`));
   }
@@ -346,6 +380,11 @@ class PgStore implements Store {
     await this.db
       .delete(settings)
       .where(and(like(settings.key, `${CURSOR_PREFIX}%`), lt(settings.updatedAt, cutoff)));
+    // E-mailcodes en verificaties leven hooguit een uur; een dag is ruim.
+    const dag = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    for (const prefix of VERIFY_PREFIXES) {
+      await this.db.delete(settings).where(and(like(settings.key, `${prefix}%`), lt(settings.updatedAt, dag)));
+    }
     return { events: ev.length, sessions: ss.length };
   }
 
@@ -425,6 +464,14 @@ class MemoryStore implements Store {
   }
   async setSetting(key: string, value: string) {
     this.settings.set(key, value);
+  }
+  async deleteSetting(key: string) {
+    this.settings.delete(key);
+  }
+  async compareAndSetSetting(key: string, expected: string | null, next: string) {
+    if ((this.settings.get(key) ?? null) !== expected) return false;
+    this.settings.set(key, next);
+    return true;
   }
   async getForwardCursor(sessionId: number) {
     return parseCursor(this.settings.get(`${CURSOR_PREFIX}${sessionId}`) ?? null);

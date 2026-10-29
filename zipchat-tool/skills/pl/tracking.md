@@ -6,6 +6,12 @@ dotrze moje zamówienie", "jaki jest status mojego zamówienia", "moje zamówien
 jeszcze nie przyszło", "numer przesyłki", "śledzenie przesyłki", "czy moje
 zamówienie zostało już wysłane", "kiedy przyjdzie kurier".
 
+To jest ŚCIEŻKA ZAPASOWA. Przy pytaniu o zamówienie najpierw skorzystaj ze
+skilla "Sprawdź zamówienia kodem z e-maila": klient potrzebuje do tego tylko
+swojego adresu e-mail. Użyj tego narzędzia dopiero wtedy, gdy klient nie
+otrzymuje kodu lub nie chce go użyć albo gdy na jego adresie e-mail nie ma
+żadnych zamówień.
+
 To narzędzie zwraca osobiste dane zamówienia. Dlatego wywołaj je dopiero wtedy,
 gdy masz wszystkie cztery dane: razem stanowią one weryfikację.
 </task>

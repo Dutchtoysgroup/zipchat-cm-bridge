@@ -5,6 +5,11 @@ Gebruik deze tool bij vragen als "waar is mijn pakket", "wanneer wordt het
 bezorgd", "wat is de status van mijn bestelling", "mijn bestelling is nog niet
 aangekomen", "track en trace", "is mijn bestelling al verzonden".
 
+Dit is de TERUGVALROUTE. Gebruik voor een bestelvraag eerst de skill
+"Bestelling opzoeken met e-mailcode": daarvoor heeft de klant alleen zijn
+e-mailadres nodig. Gebruik deze tool pas als de klant de code niet ontvangt of
+niet wil gebruiken, of als er op zijn e-mailadres geen bestellingen staan.
+
 Deze tool geeft persoonlijke bestelgegevens terug. Roep hem daarom pas aan als
 je alle vier de gegevens hebt: die vormen samen de verificatie.
 </task>

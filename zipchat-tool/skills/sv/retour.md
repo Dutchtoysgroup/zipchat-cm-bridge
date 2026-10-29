@@ -9,6 +9,12 @@ Använd det här verktyget vid: "jag vill returnera", "skicka tillbaka", "byta",
 Du hanterar INTE status eller handläggning av en retur som redan pågår — om det
 vet du ingenting. Frågar kunden om det, hänvisa då till en medarbetare.
 
+Detta är RESERVVÄGEN. Använd vid en fråga om en beställning först skillen
+"Hitta order med e-postkod": för den behöver kunden bara sin e-postadress.
+Använd det här verktyget först om kunden inte får koden eller inte vill
+använda den, eller om det inte finns några beställningar på kundens
+e-postadress.
+
 Det här verktyget returnerar personliga beställningsuppgifter. Anropa det först
 när du har alla fyra uppgifterna: tillsammans utgör de verifieringen.
 </task>

@@ -2,11 +2,12 @@
 
 Overgenomen uit HALO (agent 194 "Sven Pakketagent", tools 17 en 26).
 
-**Bewust afgeweken van HALO:** HALO heeft ook een tool die orders opzoekt op
-alléén een e-mailadres, afgeschermd met een OTP-code per mail. Zipchat kent geen
-OTP, dus die variant is niet overgenomen — zonder verificatie zou iedereen met
-een willekeurig e-mailadres andermans bestelgegevens kunnen opvragen. Deze tool
-eist ordernummer, e-mail, postcode én huisnummer samen: een echte bezitscontrole.
+**Terugvalroute.** Sinds 29 oktober 2026 gaat een bestelvraag eerst via de skill
+"Bestelling opzoeken met e-mailcode" (`skills/<taal>/verificatie.md`): alleen
+een e-mailadres en een code per mail, net als de OTP in HALO. De bridge houdt
+de code en de order-API-sleutels (README, Bestellingen met een e-mailcode).
+Deze tool, met ordernummer, e-mail, postcode én huisnummer, blijft voor als de
+klant de code niet krijgt of er op zijn adres geen bestellingen staan.
 
 ## Variabelen
 | Naam | Waarde |
@@ -23,6 +24,11 @@ Zoek de bestelling van de klant op en geef de trackinginformatie.
 Gebruik deze tool bij vragen als "waar is mijn pakket", "wanneer wordt het
 bezorgd", "wat is de status van mijn bestelling", "où est ma commande",
 "suivi de commande", "mijn bestelling is nog niet aangekomen".
+
+Dit is de TERUGVALROUTE. Gebruik voor een bestelvraag eerst de skill
+"Bestelling opzoeken met e-mailcode": daarvoor heeft de klant alleen zijn
+e-mailadres nodig. Gebruik deze tool pas als de klant de code niet ontvangt of
+niet wil gebruiken, of als er op zijn e-mailadres geen bestellingen staan.
 
 Deze tool geeft persoonlijke bestelgegevens terug. Roep hem daarom pas aan als
 je alle vier de gegevens hebt: die vormen samen de verificatie.

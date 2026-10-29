@@ -11,6 +11,11 @@ You do NOT handle the status or processing of a return that is already under
 way — you know nothing about that. If the customer asks about it, refer them to
 a member of staff.
 
+This is the FALLBACK ROUTE. For an order question, first use the skill
+"Look up orders with an email code": for that, the customer only needs their
+email address. Only use this tool if the customer does not receive the code or
+does not want to use it, or if there are no orders under their email address.
+
 This tool returns personal order details. Only call it once you have all four
 details: together they form the verification.
 </task>

@@ -6,6 +6,12 @@ llega?", "¿cuál es el estado de mi pedido?", "mi pedido todavía no ha llegado
 "número de seguimiento", "¿ya habéis enviado mi pedido?", "no me ha llegado el
 pedido".
 
+Esta es la RUTA ALTERNATIVA. Para una pregunta sobre un pedido, usa primero la
+skill "Consultar pedidos con código por e-mail": para ello el cliente solo
+necesita su dirección de correo electrónico. Usa esta herramienta solo si el
+cliente no recibe el código o no quiere usarlo, o si no hay pedidos con su
+dirección de correo electrónico.
+
 Esta herramienta devuelve datos personales del pedido. Por eso, no la llames
 hasta que tengas los cuatro datos: juntos sirven como verificación.
 </task>

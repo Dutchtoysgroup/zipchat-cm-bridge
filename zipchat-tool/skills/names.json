@@ -40,6 +40,16 @@
       "es": "Comunicar una reclamación o solicitud de servicio",
       "it": "Segnala un reclamo o una richiesta di assistenza",
       "pl": "Zgłoś reklamację lub prośbę serwisową"
+    },
+    "verificatie": {
+      "nl": "Bestelling opzoeken met e-mailcode",
+      "de": "Bestellung per E-Mail-Code abrufen",
+      "en": "Look up orders with an email code",
+      "da": "Find ordre med e-mailkode",
+      "sv": "Hitta order med e-postkod",
+      "es": "Consultar pedidos con código por e-mail",
+      "it": "Cerca ordini con codice via e-mail",
+      "pl": "Sprawdź zamówienia kodem z e-maila"
     }
   },
   "vorigeNamen": {},
@@ -47,6 +57,7 @@
     "doorzetten": ["MSC_BRIDGE_URL", "MSC_BRIDGE_SECRET"],
     "tracking": ["EXIT_ORDER_API_AUTH", "EXIT_TRACKING_API_AUTH"],
     "retour": ["EXIT_ORDER_API_AUTH"],
-    "klacht": ["EXIT_ORDER_API_AUTH"]
+    "klacht": ["EXIT_ORDER_API_AUTH"],
+    "verificatie": ["EXIT_BRIDGE_URL", "MSC_BRIDGE_SECRET"]
   }
 }

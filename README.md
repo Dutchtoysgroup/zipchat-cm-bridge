@@ -199,6 +199,8 @@ Wil je lokaal een echte database, zet dan `DATABASE_URL` op een eigen Postgres
 |---|---|---|
 | `POST /api/zipchat/escalate` | de Zipchat custom tool | escalatie starten |
 | `POST /api/zipchat/marketing` | Zipchat-tool op de social-media-agent | samenwerkingsaanvraag mailen naar marketing |
+| `POST /api/zipchat/verify` | skill "Bestelling opzoeken met e-mailcode" | e-mailcode sturen (`start`) en controleren (`check`) |
+| `POST /api/zipchat/order` | dezelfde skill | tracking of serviceportaallink voor een bevestigde bestelling |
 | `POST /api/cm/webhook` | de Conversational Router | agent-antwoord bezorgen |
 | `POST /api/cm/handover` | de Conversational Router | handover-status bijwerken |
 | `POST /api/cm/event` | de Conversational Router | router-events, sluit de sessie bij RouterSessionEnded |
@@ -422,6 +424,56 @@ zijn van elke bot, anders kan de bridge het gesprek niet overnemen. Controleren:
 curl -s "https://app.zipchat.ai/api/integrations/backend_api/v1/chats/<chat_id>/users" \
   -H "Authorization: Bearer $ZIPCHAT_API_TOKEN"
 ```
+
+## Bestellingen met een e-mailcode
+
+Sinds 29 oktober 2026, zoals HALO het deed: bij een vraag over een bestelling
+(tracking, retour, klacht) vraagt de bot alleen het e-mailadres. De bridge
+mailt een code van 6 cijfers; typt de klant die goed over, dan krijgt de bot
+de bestellingen op dat adres en kiest de klant om welke het gaat. De oude
+route met bestelnummer, e-mail, postcode en huisnummer blijft als terugval
+(de klant krijgt geen code, of er staan geen bestellingen op het adres).
+
+```
+klant: "waar is mijn pakket?"  →  bot vraagt e-mailadres
+POST /api/zipchat/verify {action:start}  →  mail vanuit noreply@exittoys.com
+klant typt code  →  POST /api/zipchat/verify {action:check}
+                    →  bestellingen op dat adres + token (1 uur geldig)
+klant kiest bestelling  →  POST /api/zipchat/order {token, order_id, info}
+                    →  tracking of serviceportaallink
+```
+
+* **De bridge controleert, niet de bot.** Bij HALO zat de controle in de flow;
+  in Zipchat kan de bot alleen curl draaien en zou hij een stap kunnen
+  overslaan. Daarom roept de bridge de order-API's aan (`src/lib/exitOrders.ts`)
+  en geeft hij bestellingen pas na een goede code. `/order` weigert elk
+  ordernummer dat niet in de lijst van het bevestigde adres staat.
+* **Grenzen** (`src/lib/verify.ts`): code 10 minuten geldig, 5 pogingen (ook
+  bij gelijktijdige gokken: de teller gaat met compare-and-set), hoogstens 3
+  codes per adres per uur en niet vaker dan elke 30 seconden. Een mislukte
+  verzending telt niet mee.
+* **Opslag** in `bridge_settings`, zonder migratie: `otp:<e-mail>` (gehashte
+  code), `otpok:<hash van token>` en `otprate:<e-mail>`. De dagelijkse
+  opschoning haalt ze na een dag weg.
+* **De mail** (`src/lib/verifyMail.ts`) staat in de huisstijl en in de taal
+  van de webshop van de bot (9 talen). Het logo gaat als inline bijlage mee,
+  zodat het er ook staat als de mailclient afbeeldingen blokkeert.
+* **Verzenden** gaat met een eigen Entra-app, "Zipchat noreply" (client-id
+  `48a88d19-…`), los van die van het dataplatform. Die heeft geen tenant-brede
+  Mail.Send; via Exchange RBAC for Applications mag hij alléén vanuit
+  `noreply@exittoys.com` versturen. Klanten zien "EXIT Toys" als afzender.
+  Het geheim is 24 maanden geldig (tot oktober 2028); zet het nieuwe in
+  `VERIFY_GRAPH_CLIENT_SECRET`.
+* **App settings:** `VERIFY_GRAPH_TENANT_ID`, `VERIFY_GRAPH_CLIENT_ID`,
+  `VERIFY_GRAPH_CLIENT_SECRET`, `EXIT_ORDER_API_AUTH`, `EXIT_TRACKING_API_AUTH`
+  (de `dicode …`-headers uit HALO-tools 16 en 26).
+* **Logboek:** `verify.code_sent`, `verify.mail_failed`, `verify.failed`,
+  `verify.ok`, `verify.order_refused`, `verify.rate_limited`. E-mailadressen
+  staan er afgekort in (`s***@domein`).
+* **Skill:** `zipchat-tool/skills/<taal>/verificatie.md`, via het sync-script
+  op alle landenbots, met de variabelen `EXIT_BRIDGE_URL` (`…/api/zipchat`) en
+  `MSC_BRIDGE_SECRET`. De tracking-, retour- en klachtskills zeggen dat ze de
+  terugval zijn.
 
 ## Samenwerkingsaanvragen naar marketing
 

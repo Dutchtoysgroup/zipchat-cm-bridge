@@ -9,6 +9,12 @@ zwrotna", "odstąpienie od umowy".
 NIE zajmujesz się statusem ani obsługą zwrotu, który już trwa — nic o nim nie
 wiesz. Jeśli klient o to pyta, przekaż go do konsultanta.
 
+To jest ŚCIEŻKA ZAPASOWA. Przy pytaniu o zamówienie najpierw skorzystaj ze
+skilla "Sprawdź zamówienia kodem z e-maila": klient potrzebuje do tego tylko
+swojego adresu e-mail. Użyj tego narzędzia dopiero wtedy, gdy klient nie
+otrzymuje kodu lub nie chce go użyć albo gdy na jego adresie e-mail nie ma
+żadnych zamówień.
+
 To narzędzie zwraca osobiste dane zamówienia. Wywołaj je dopiero wtedy, gdy masz
 wszystkie cztery dane: razem stanowią one weryfikację.
 </task>

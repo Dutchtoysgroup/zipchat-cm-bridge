@@ -10,6 +10,12 @@ Du tager dig IKKE af status eller behandling af en returnering, der allerede er
 i gang — det ved du intet om. Spørger kunden om det, så henvis til en
 medarbejder.
 
+Dette er RESERVERUTEN. Brug ved et spørgsmål om en ordre først skill'en
+"Find ordre med e-mailkode": til den har kunden kun brug for sin
+e-mailadresse. Brug først dette værktøj, hvis kunden ikke modtager koden eller
+ikke vil bruge den, eller hvis der ikke er nogen ordrer på kundens
+e-mailadresse.
+
 Dette værktøj returnerer personlige ordreoplysninger. Kald det først, når du har
 alle fire oplysninger: tilsammen udgør de verifikationen.
 </task>

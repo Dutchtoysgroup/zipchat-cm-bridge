@@ -7,6 +7,12 @@ Nutze dieses Tool bei Fragen wie "wo ist mein Paket", "wann wird geliefert",
 Bestellung ist noch nicht angekommen", "Sendungsverfolgung", "Trackingnummer",
 "wurde meine Bestellung schon verschickt".
 
+Das ist der AUSWEICHWEG. Nutze für eine Frage zu einer Bestellung zuerst den
+Skill "Bestellung per E-Mail-Code abrufen": Dafür braucht der Kunde nur seine
+E-Mail-Adresse. Nutze dieses Tool erst, wenn der Kunde den Code nicht bekommt
+oder nicht nutzen will, oder wenn unter seiner E-Mail-Adresse keine
+Bestellungen stehen.
+
 Dieses Tool gibt persönliche Bestelldaten zurück. Rufe es deshalb erst auf, wenn
 du alle vier Angaben hast: Zusammen bilden sie die Verifizierung.
 </task>

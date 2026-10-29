@@ -12,6 +12,12 @@ Für den Status oder die Bearbeitung einer bereits laufenden Beschwerde oder
 Serviceanfrage bist du NICHT zuständig — darüber weißt du nichts. Fragt der
 Kunde danach, verweise ihn an einen Mitarbeiter.
 
+Das ist der AUSWEICHWEG. Nutze für eine Frage zu einer Bestellung zuerst den
+Skill "Bestellung per E-Mail-Code abrufen": Dafür braucht der Kunde nur seine
+E-Mail-Adresse. Nutze dieses Tool erst, wenn der Kunde den Code nicht bekommt
+oder nicht nutzen will, oder wenn unter seiner E-Mail-Adresse keine
+Bestellungen stehen.
+
 Dieses Tool gibt persönliche Bestelldaten zurück. Rufe es erst auf, wenn du alle
 vier Angaben hast: Zusammen bilden sie die Verifizierung.
 </task>

@@ -78,13 +78,26 @@ Elk bericht dat de bridge zo meestuurt, heeft een id dat begint met `5a1c0de0`
 en een tijd van vóór de doorzetting. Stuurt de router er een terug naar de
 webhook, dan zet de bridge het niet nog eens in het chatvenster.
 
-**Webshop:** alles landt in **EXIT Toys Nederland**, net als de
-offline-overdrachten van HALO; de medewerker verplaatst het zo nodig. De
-`WebStoreReferrer` in de handover (app setting `CM_WEBSTORE_REFERRER`,
-standaard `HALO`) verandert dat niet: Robin maakt het gesprek al aan bij het
-eerste bericht, en de handover komt daarna. Getest op 30 okt met "HALO" en met
-een webshop-URL. HALO doet de handover vóór de berichten, maar wij krijgen het
-chat-id pas bij het eerste bericht.
+**De handover maakt het gesprek in Robin aan.** Na de berichten vraagt de
+bridge een handover aan (mutationrequest). Pas dan geeft de router het gesprek
+aan Robin, met de `CustomerInfo` en de `WebStoreReferrer` erbij. Daardoor:
+
+* is het **e-mailadres aan de klant gekoppeld**, zodat Robin het antwoord kan
+  mailen, en staat er "Bot heeft de conversatie doorgestuurd";
+* kiest de referrer de **webshop**: live chat met `HALO` (app setting
+  `CM_WEBSTORE_REFERRER`) naar **HALO Livechat**, offline zonder referrer
+  (`CM_WEBSTORE_REFERRER_OFFLINE`, standaard leeg) naar **EXIT Toys
+  Nederland**. Zo deed HALO het ook.
+
+Dat werkt alleen als in de router de regel **Zipchat bridge → Robin uit
+staat** (zie
+[Wat er aan de CM-kant moet gebeuren](#wat-er-aan-de-cm-kant-moet-gebeuren)).
+Van 20 tot 30 okt stond hij aan: dan kreeg Robin de berichten meteen, maakte
+het gesprek aan in EXIT Toys Nederland en negeerde de handover. Het e-mailadres bleef leeg, dus Robin kon niet mailen.
+
+Mislukt de handover, dan probeert de bridge het nog één keer. Lukt het dan nog
+niet, dan maakt hij offline een Online-gesprek aan; bij live chat krijgt de
+sessie de status error.
 
 Op het dashboard staat dit onder **Bemensing** op Automatisch; daar kun je ook
 altijd live chat of altijd e-mail vastzetten. Zonder Zipchat-gesprek-id kan er
@@ -135,8 +148,8 @@ venster.
 
 ### Terugval: Online-gesprek
 
-Weigert de router de doorzetting, dan maakt de bridge alsnog een Online-gesprek
-aan; met `ESCALATION_TARGET=robin` doet hij dat altijd. Hoe dat werkt:
+Weigert de router de doorzetting of de handover, dan maakt de bridge alsnog
+een Online-gesprek aan; met `ESCALATION_TARGET=robin` doet hij dat altijd. Hoe dat werkt:
 
 * **Geen gedocumenteerde API.** De bridge doet wat Robins eigen widget doet
   (uitgezocht op 20 okt 2026): `POST /Conversation/Start/` met header `apikey`,
@@ -338,6 +351,11 @@ Die twee id's vullen `CM_ACCOUNT_ID` en `CM_ADAPTER_ID`.
 
 Verder nodig:
 
+- in de router (Legacy) bij de regels van **Zipchat bridge**: **Robin →
+  Zipchat bridge aan** (antwoorden terug naar de chat) en **Zipchat bridge →
+  Robin uit**. Die laatste moet echt uit: anders krijgt Robin de berichten
+  vóór de handover, en dan worden e-mailadres en webshop niet overgenomen
+  (zie [Hoe het loopt](#hoe-het-loopt)). Na wijzigen opslaan;
 - een routingregel die naar **Agent Inbox** gaat; het `stateNameId` daarvan
   invullen als `CM_AGENT_STATE_NAME_ID`;
 - een **product token** met recht `ConversationalRouter.RouterSession_Update`.

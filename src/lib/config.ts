@@ -68,12 +68,13 @@ export const config = {
     /** Kanaalnaam die CM in het chat-object verwacht. */
     channel: opt("CM_CHANNEL") ?? "CXWebConversations",
     /**
-     * WebStoreReferrer in de handover, zoals HALO hem meestuurt ("HALO" =
-     * webshop HALO Livechat). Bij de bridge kiest hij de webshop niet: Robin
-     * heeft het gesprek dan al aangemaakt, in EXIT Toys Nederland, met het
-     * WhatsApp-autobericht van die webshop erbij (getest 30 okt 2026).
+     * WebStoreReferrer in de handover bij een live chat, zoals HALO hem
+     * meestuurt: "HALO" = webshop HALO Livechat. Werkt alleen zolang de
+     * router-regel Zipchat bridge → Robin uit staat (README).
      */
     webStoreReferrer: opt("CM_WEBSTORE_REFERRER") ?? "HALO",
+    /** Idem zonder live chat. Leeg, zoals HALO: dan EXIT Toys Nederland. */
+    offlineWebStoreReferrer: opt("CM_WEBSTORE_REFERRER_OFFLINE") ?? "",
     /** stateNameId van de agent-state in de router (handover naar mens). */
     agentStateNameId: opt("CM_AGENT_STATE_NAME_ID"),
     /** stateNameId om terug te zetten naar de bot, indien gebruikt. */

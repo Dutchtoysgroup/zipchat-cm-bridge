@@ -337,14 +337,52 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     payload,
   });
 
-  if (!sent.ok) {
-    // Weigert de router, dan liever een Online-gesprek dan geen gesprek.
+  if (realChatId !== cmChat.id && sent.ok) {
+    await store.updateSession(session.id, { cmChatId: realChatId });
+    cmChat.id = realChatId;
+  }
+
+  // 5. Handover aanvragen zoals HALO dat doet (dit endpoint werkt met ons
+  // producttoken; de routing-control uit de documentatie niet). De router
+  // houdt de berichten vast tot deze aanroep, want de regel Zipchat bridge →
+  // Robin staat bewust uit. Pas hier maakt Robin het gesprek aan, en dan neemt
+  // hij CustomerInfo over (e-mailadres aan de klant gekoppeld) en kiest
+  // WebStoreReferrer de webshop. Getest op 30 okt 2026. Met die regel aan
+  // (20–30 okt) kreeg Robin de berichten eerder en negeerde hij beide.
+  // Live chat gaat naar HALO Livechat, offline zonder referrer naar EXIT Toys
+  // Nederland: precies zoals HALO.
+  const handover = () =>
+    cm.requestHandoverMutation({
+      chatId: realChatId,
+      name,
+      email,
+      referrer: liveChat ? config.cm.webStoreReferrer : config.cm.offlineWebStoreReferrer,
+    });
+  let mut = sent.ok ? await handover() : null;
+  if (mut && !mut.ok) mut = await handover();
+  if (mut) {
+    await store.logEvent({
+      sessionId: session.id,
+      direction: "bridge->cm",
+      kind: "escalate.handover_request",
+      ok: mut.ok,
+      statusCode: mut.status,
+      summary: mut.ok
+        ? "Handover aangevraagd bij de router (mutationrequest)"
+        : `Handover aanvragen mislukt: ${mut.error}`,
+    });
+  }
+
+  // Zonder handover komt er niets in Robin. Dan liever een Online-gesprek dan
+  // geen gesprek.
+  if (!sent.ok || !mut?.ok) {
     if (online && config.escalationTarget === "cm") {
       const viaRobin = await online();
       if (viaRobin) return viaRobin;
     }
     await store.updateSession(session.id, { status: "error" });
-    return { ok: false, sessionId: session.id, message: `Doorzetten naar CM mislukt: ${sent.error}` };
+    const error = sent.ok ? `handover mislukt: ${mut?.error}` : sent.error;
+    return { ok: false, sessionId: session.id, message: `Doorzetten naar CM mislukt: ${error}` };
   }
 
   // 5b. Onafhankelijk van CM: de klantenservice per e-mail op de hoogte stellen.
@@ -382,41 +420,6 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
       summary: flag.ok ? "Gesprek in Zipchat als geëscaleerd gemarkeerd" : `Markeren mislukt: ${flag.error}`,
     });
   }
-
-  if (realChatId !== cmChat.id) {
-    await store.updateSession(session.id, { cmChatId: realChatId });
-    cmChat.id = realChatId;
-  }
-
-  // 5. Handover aanvragen zoals HALO dat doet. Dit is het endpoint dat wél
-  // werkt met ons producttoken; de routing-control uit de documentatie niet.
-  // Altijd aanroepen, ook in e-mailmodus: dit stuurt naam/e-mail mee als
-  // CustomerInfo in de routing-context. LET OP: dit vult het profielpaneel
-  // in Robin niet betrouwbaar — bevestigd op 2 sep 2026, een ticket met een
-  // succesvolle (201) aanroep hier miste alsnog het e-mailadres in Robin en
-  // moest handmatig gekoppeld worden. De echte koppelmethode is nog niet
-  // gevonden; zie project-memory zipchat-cm-bridge voor de laatste stand.
-  // De WebStoreReferrer hierin kiest de webshop níet: Robin maakt het gesprek
-  // al aan bij het eerste bericht, en deze aanroep komt daarna. Getest op
-  // 30 okt 2026 met "HALO" en met de URL van een webshop: het gesprek landde
-  // allebei keren in EXIT Toys Nederland, net als de offline-overdracht van
-  // HALO. Bij HALO zelf gaat de handover vóór de berichten; dat kan hier niet,
-  // want het chat-id krijgen we pas bij het eerste bericht.
-  const mut = await cm.requestHandoverMutation({
-    chatId: realChatId,
-    name,
-    email,
-  });
-  await store.logEvent({
-    sessionId: session.id,
-    direction: "bridge->cm",
-    kind: "escalate.handover_request",
-    ok: mut.ok,
-    statusCode: mut.status,
-    summary: mut.ok
-      ? "Handover aangevraagd bij de router (mutationrequest)"
-      : `Handover aanvragen mislukt: ${mut.error}`,
-  });
 
   // 5c. Router expliciet naar de agent-state duwen (indien geconfigureerd).
   if (config.cm.agentStateNameId) {

@@ -48,7 +48,8 @@ medewerker komen terug in dezelfde chatwidget.
 
 ## Hoe het loopt
 
-Sinds 24 oktober 2026 precies zoals HALO (Tobi) het deed. Bij elke doorzetting
+Precies zoals HALO (Tobi) het deed: live chat sinds 24 oktober 2026, de
+offline-route sinds 30 oktober. Bij elke doorzetting
 vraagt de bridge eerst aan Mobile Service Cloud of er iemand online is (dezelfde
 presence-check als HALO):
 
@@ -60,22 +61,18 @@ presence-check als HALO):
   Klantenservice". Wat de klant daarna typt, gaat via de pollketting naar Robin.
   Loopt de klant weg, dan mailt de medewerker hem vanuit Robin; het e-mailadres
   staat bovenaan het gesprek.
-* **Offline → Online-gesprek.** Zoals de offline-overdracht van HALO: een
-  Online-gesprek in Robin, precies zoals het contactformulier op de webshops dat
-  maakt. De medewerker antwoordt in Robin en **Robin mailt dat antwoord zelf**
-  naar de klant, vanuit het adres van de webshop (info@exittoys.nl, .de of .com).
-  Een reactie van de klant komt in hetzelfde gesprek terug.
+* **Offline → chat met antwoord per e-mail.** Precies zoals de
+  offline-overdracht van HALO: het gesprek gaat ook via de Conversational Router
+  naar Robin en komt binnen als chat (kanaal CXWebConversations), nu in de
+  webshop van het land (`WebStoreReferrer` = de URL van de webshop). De
+  medewerker antwoordt in Robin en **Robin mailt dat antwoord zelf** naar de
+  klant ("Contact with EXIT Toys …", vanaf het adres van de webshop). Mailt de
+  klant terug, dan komt dat in hetzelfde gesprek. De AI blijft in de chat aan.
 
 Op het dashboard staat dit onder **Bemensing** op Automatisch; daar kun je ook
 altijd live chat of altijd e-mail vastzetten. Zonder Zipchat-gesprek-id kan er
-geen live chat zijn (er is geen venster om het antwoord in te zetten); dan wordt
-het altijd een Online-gesprek.
-
-Waarom het tussen 20 en 24 oktober alleen per e-mail ging: tot 20 oktober kwamen
-antwoorden uit Robin nooit aan, omdat de routerregel Robin → Zipchat bridge
-ontbrak en de adapter-endpoints nog naar Vercel wezen. Na die reparatie is de
-hele keten los getest: antwoord uit Robin bij de bridge (20 okt), en een bericht
-via de Zipchat-API in een echt chatvenster op exittoys.nl (24 okt).
+geen live chat zijn (er is geen venster om het antwoord in te zetten); dan gaat
+het altijd per e-mail.
 
 Hieronder de offline-route:
 
@@ -85,14 +82,44 @@ Klant ──▶ Zipchat-widget ──▶ AI kan het niet aan
                               ▼  skill vraagt naam + e-mail
                         POST /api/zipchat/escalate
                               │
-                              ▼  src/lib/robin.ts
-             contact.robinhq.com: Online-gesprek in de webshop van het land
+                              ▼  presence-check: offline
+             Conversational Router (adapter "Zipchat bridge")
+                              │  + mutationrequest met CustomerInfo
+                              ▼
+            Robin: chat in de webshop van het land
                               │
                  medewerker antwoordt in Robin
                               │
                               ▼
             Robin mailt het antwoord naar de klant
 ```
+
+### Waarom niet als Online-gesprek
+
+Van 20 tot 30 oktober 2026 werd een offline-doorzetting een Online-gesprek via
+de route van Robins eigen widget (`src/lib/robin.ts`). In Robin ziet dat eruit
+als het contactformulier, en de klantenservice wilde het zien zoals HALO het
+aanleverde. Wat het Robin-datawarehouse liet zien (30 okt):
+
+* HALO-overdrachten, online én offline, hebben kanaal **CXWebConversations**.
+  Een offline-overdracht van HALO (`text_msc` met naam en e-mail) landde in
+  EXIT Toys Nederland, een live chat in HALO Livechat.
+* De doorzettingen van Zipchat via de router (31 aug – 20 okt) zagen er precies
+  zo uit.
+* Robin mailt een antwoord in zo'n gesprek zelf naar de klant. Klanten mailden
+  terug op "Contact with EXIT Toys Nederland" terwijl de webhook van de bridge
+  in die periode stuk was. De reden om op 20 oktober over te stappen (antwoorden
+  kwamen niet aan) ging dus over het chatvenster, niet over de mail.
+
+De bridge mailt een antwoord in e-mailmodus daarom niet zelf
+(`agent_reply.via_robin` in het logboek). Automatische teamberichten
+(`CM_SKIP_SENDERS`, standaard `WhatsApp`) zet hij ook bij live chat niet in het
+venster.
+
+### Terugval: Online-gesprek
+
+Weigert de router de doorzetting, dan maakt de bridge alsnog een Online-gesprek
+aan; met `ESCALATION_TARGET=robin` doet hij dat altijd. Hoe dat werkt:
 
 * **Geen gedocumenteerde API.** De bridge doet wat Robins eigen widget doet
   (uitgezocht op 20 okt 2026): `POST /Conversation/Start/` met header `apikey`,
@@ -107,21 +134,18 @@ Klant ──▶ Zipchat-widget ──▶ AI kan het niet aan
   de antwoordmail staat per webshop in Robin.
 * **De klant leest mee.** Robin citeert het eerste bericht onder elk antwoord.
   Daarom staat er alleen het gesprek in, geen samenvatting van de assistent.
+* **Onderwerp** in de taal van het land (`questionSubject` in `src/lib/shops.ts`).
+
+### Voor beide routes
+
 * **Altijd tekst in Robin.** Geeft de assistent geen of een verkeerd
   gespreks-id mee, dan zoekt de bridge het gesprek op het e-mailadres dat de
   klant in de chat typte (recente gesprekken op die bot, `findConversationByEmail`).
-  Pas als dat ook niets oplevert, gaat de samenvatting van de assistent mee als
-  "Vraag van de klant", in de taal van de klant (zo vragen de skills het).
+  Pas als dat ook niets oplevert, gaat de samenvatting van de assistent mee, in
+  de taal van de klant (zo vragen de skills het).
 * **Termijn.** De bot belooft "binnen 4 werkdagen" (app setting
   `RESPONSE_TIME_TEXT`), net als de bevestiging die Robin stuurt. Pas je die in
   Robin aan, zet dan ook deze setting gelijk.
-* **Onderwerp** in de taal van het land (`questionSubject` in `src/lib/shops.ts`).
-* **Terugval.** Neemt Robin het gesprek niet aan, of staat
-  `ESCALATION_TARGET=cm`, dan gaat het als chat via de Conversational Router en
-  mailt de bridge het antwoord zelf via Microsoft Graph (`handleAgentReply`).
-  Daarvoor moet de Graph-app op de info@-mailboxen mogen versturen; dat mag hij
-  nu niet (alleen marketing@). Automatische teamberichten
-  (`CM_SKIP_SENDERS`, standaard `WhatsApp`) gaan dan niet mee.
 * De pollketting hieronder draait voor live-chatsessies.
 
 ### Pollketting en vangnet
@@ -350,9 +374,8 @@ endpoints van de adapter op het oude Vercel-adres staan, dat 404 gaf. Zet na
 elke verhuizing of rotatie van `CM_WEBHOOK_SECRET` de drie endpoints hierboven
 opnieuw, en kijk daarna of er een `webhook.received` in het logboek verschijnt.
 
-Een antwoord in de chat komt ook in **e-mailmodus** bij de klant: de bridge
-neemt het gesprek dan over (AI op pauze) en laat het verder als live chat
-lopen.
+Een antwoord in een gesprek in **e-mailmodus** komt hier ook binnen, maar dat
+mailt Robin zelf; de bridge legt het alleen vast (`agent_reply.via_robin`).
 
 ### Over het Hand Over Endpoint
 

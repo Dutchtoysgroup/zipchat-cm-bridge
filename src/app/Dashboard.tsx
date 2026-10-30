@@ -232,7 +232,7 @@ export default function Dashboard({ user }: { user: string | null }) {
         const uitleg: Record<string, string> = {
           auto: `Modus: automatisch. Mobile Service Cloud bepaalt het — op dit moment ${data.live ? "wél" : "géén"} live chat.`,
           livechat: "Modus: live chat vastgezet. Elke escalatie belooft een medewerker in de chat.",
-          email: "Modus: e-mail vastgezet. Elke escalatie wordt een Online-gesprek in Robin; de klant krijgt antwoord per e-mail.",
+          email: "Modus: e-mail vastgezet. Elke escalatie komt als chat in Robin en Robin mailt het antwoord naar de klant.",
         };
         setResult({ ok: true, text: uitleg[next] });
       } else {
@@ -498,11 +498,11 @@ export default function Dashboard({ user }: { user: string | null }) {
                         <h2>Bemensing</h2>
                         <p className="uitleg">
                           {mode === "auto"
-                            ? "Zoals HALO: is er in Mobile Service Cloud iemand online, dan komt het gesprek als live chat in Robin (webshop HALO Livechat) en antwoordt de medewerker in het chatvenster. Anders wordt het een Online-gesprek en mailt Robin het antwoord."
+                            ? "Zoals HALO: is er in Mobile Service Cloud iemand online, dan komt het gesprek als live chat in Robin (webshop HALO Livechat) en antwoordt de medewerker in het chatvenster. Anders komt het als chat in de webshop van het land, en mailt Robin het antwoord."
                             : mode === "livechat"
                               ? "Handmatig vastgezet: elke doorzetting wordt een live chat, ook als MSC offline meldt."
                               : mode === "email"
-                                ? "Handmatig vastgezet: elke doorzetting wordt een Online-gesprek in Robin en de klant krijgt antwoord per e-mail, ook als er wél iemand online is."
+                                ? "Handmatig vastgezet: Robin mailt elk antwoord naar de klant, ook als er wél iemand online is."
                                 : "Wordt geladen…"}
                         </p>
                       </div>

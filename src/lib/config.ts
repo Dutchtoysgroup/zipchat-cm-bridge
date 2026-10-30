@@ -183,13 +183,14 @@ export const config = {
    * (dat is de klantenservice), maar per mail rechtstreeks naar marketing.
    */
   /**
-   * Waar een doorzetting heen gaat als er géén live chat is. "robin"
-   * (standaard): een Online-gesprek in Robin via het contactformulier, en Robin
-   * mailt het antwoord zelf (src/lib/robin.ts). "cm": als chat via de
-   * Conversational Router, en de bridge mailt het antwoord (handleAgentReply).
-   * Een live chat gaat altijd via de router, net als bij HALO.
+   * Waar een doorzetting heen gaat als er géén live chat is. "cm"
+   * (standaard): via de Conversational Router, zoals de offline-overdracht van
+   * HALO; in Robin een chat (CXWebConversations) en Robin mailt het antwoord.
+   * "robin": een Online-gesprek via het contactformulier (src/lib/robin.ts);
+   * dat is ook de terugval als de router weigert. Een live chat gaat altijd
+   * via de router.
    */
-  escalationTarget: opt("ESCALATION_TARGET") === "cm" ? ("cm" as const) : ("robin" as const),
+  escalationTarget: opt("ESCALATION_TARGET") === "robin" ? ("robin" as const) : ("cm" as const),
 
   robin: {
     /**
@@ -198,12 +199,6 @@ export const config = {
      */
     apiKey: opt("ROBIN_API_KEY") ?? "5uzr3kmj",
   },
-
-  /**
-   * Antwoorden uit Robin gaan per e-mail naar de klant (src/lib/shops.ts).
-   * Leeg = het info@-adres van het land; gezet = één afzender voor alles.
-   */
-  csMailFrom: opt("CS_MAIL_FROM"),
 
   /**
    * Afzendernamen in Robin waarvan berichten niet naar de klant gaan: de

@@ -22,8 +22,10 @@ import { requestJson, type ApiResult } from "./http";
  *    mailt Robin het antwoord pas na ongeveer 10 minuten (getest 20 okt 2026):
  *    zo lang wacht hij of de bezoeker het in de widget leest.
  *
- * Verandert CM deze route, dan valt de bridge terug op de Conversational
- * Router (ESCALATION_TARGET=cm).
+ * Sinds 30 okt 2026 is dit alleen nog de terugval als de Conversational Router
+ * een doorzetting weigert, of de keuze met ESCALATION_TARGET=robin. De
+ * klantenservice ziet een Online-gesprek als contactformulier; een doorzetting
+ * via de router komt binnen als chat, net als bij HALO.
  */
 
 const BASE = (process.env.ROBIN_CONTACT_BASE_URL ?? "https://contact.robinhq.com").replace(/\/+$/, "");

@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 const leeg = (v: unknown) => (typeof v === "string" && v.trim() === "" ? undefined : v);
 
 const Body = z.object({
-  token: z.preprocess(leeg, z.string().trim().max(200).optional()),
+  email: z.preprocess(leeg, z.string().trim().max(320).optional()),
+  code: z.preprocess(leeg, z.union([z.string(), z.number()]).transform(String).optional()),
   order_id: z.preprocess(leeg, z.union([z.string(), z.number()]).transform(String).optional()),
   info: z.enum(["list", "tracking", "retour", "klacht"]).default("list"),
   conversation_id: z.preprocess(leeg, z.union([z.string(), z.number()]).transform(String).optional()),
@@ -16,8 +17,9 @@ const Body = z.object({
 
 /**
  * Tracking of een serviceportaallink voor een bestelling van een klant die
- * zijn e-mailadres net met een code bevestigde. Zonder geldig token, of voor
- * een bestelling van een ander adres, komt er niets terug (src/lib/verify.ts).
+ * zijn e-mailadres met een code bevestigde. Zonder dat adres plus een goede
+ * code, of voor een bestelling van een ander adres, komt er niets terug
+ * (src/lib/verify.ts).
  */
 export async function POST(req: Request) {
   const auth = checkBridgeSecret(req);
@@ -38,6 +40,6 @@ export async function POST(req: Request) {
   }
 
   const d = parsed.data;
-  const result = await orderInfo({ token: d.token, orderId: d.order_id, info: d.info, conversationId: d.conversation_id });
+  const result = await orderInfo({ email: d.email, code: d.code, orderId: d.order_id, info: d.info, conversationId: d.conversation_id });
   return NextResponse.json(result, { status: 200 });
 }

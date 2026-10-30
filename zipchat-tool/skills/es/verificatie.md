@@ -17,7 +17,9 @@ dirección que el propio cliente te ha dado en esta conversación.
 <inputs_resolution>
 {EMAIL} — la dirección de correo electrónico con la que se hizo el pedido.
 Pídela si todavía no la tienes, y espera la respuesta. Nunca te inventes una
-dirección.
+dirección. Al pedirlo, explica en una frase corta por qué: con un código por
+correo nos aseguramos de que solo el propio cliente pueda ver los datos de sus
+pedidos.
 
 {CODE} — las 6 cifras que el cliente copia del correo electrónico. Solo el
 cliente conoce este código. Nunca te lo inventes, y nunca lo pidas antes de que
@@ -26,7 +28,15 @@ el paso 1 haya enviado un código.
 {CONVERSATION_ID} — el id de esta conversación, exactamente como aparece en tu
 contexto de sistema. Si no estás seguro, déjalo vacío ("").
 
-{TOKEN} — sale del paso 2 ("token"), nunca del cliente. Nunca lo menciones.
+Un código por conversación. Si el cliente ya escribió en esta conversación un
+código que era correcto (el paso 2 devolvió "verified": true), ese código
+sigue siendo válido durante una hora junto con la misma dirección de correo.
+En ese caso no vuelvas a pedir un código ni repitas el paso 1: tampoco cuando
+el cliente elija un pedido de la lista, pregunte por otro pedido o cambie lo
+que quiere (por ejemplo, una devolución en lugar de una reclamación). Ve
+directamente al paso 3 con esa dirección de correo y ese código de la
+conversación. Solo si el paso 3 dice que el código ha caducado o es
+desconocido, vuelves a empezar en el paso 1.
 
 {ORDER_ID} — el número de pedido que el cliente elige de la lista del paso 2,
 exactamente como aparece ahí.
@@ -54,20 +64,20 @@ código):
 
 curl -sS -X POST "$EXIT_BRIDGE_URL/verify" -H "Content-Type: application/json" -H "X-Bridge-Secret: $MSC_BRIDGE_SECRET" -d '{"action":"check","chat_id":"{{CHAT_ID}}","conversation_id":"{CONVERSATION_ID}","email":"{EMAIL}","code":"{CODE}"}'
 
-Si "verified" es true, los pedidos del cliente están en "orders" y recibes un
-"token" para el paso 3. Si "verified" es false: sigue lo que dice "message"
-(pedir que vuelva a escribir el código, enviar un código nuevo o usar la
-alternativa).
+Si "verified" es true, los pedidos del cliente están en "orders". Si
+"verified" es false: sigue lo que dice "message" (pedir que escriba el código
+otra vez, enviar un código nuevo o usar la alternativa).
 
 Paso 3 — obtener los datos del pedido elegido:
 
-curl -sS -X POST "$EXIT_BRIDGE_URL/order" -H "Content-Type: application/json" -H "X-Bridge-Secret: $MSC_BRIDGE_SECRET" -d '{"token":"{TOKEN}","order_id":"{ORDER_ID}","info":"{INFO}","conversation_id":"{CONVERSATION_ID}"}'
+curl -sS -X POST "$EXIT_BRIDGE_URL/order" -H "Content-Type: application/json" -H "X-Bridge-Secret: $MSC_BRIDGE_SECRET" -d '{"email":"{EMAIL}","code":"{CODE}","order_id":"{ORDER_ID}","info":"{INFO}","conversation_id":"{CONVERSATION_ID}"}'
 
 - "tracking": recibes "tracking_number" y "tracking_url".
 - "retour" / "klacht": el enlace del portal de servicio está en "result".
 
-La verificación vale una hora. Si después el cliente quiere algo con otro
-pedido de la lista, vuelve a usar el mismo token en el paso 3.
+En el paso 3 usa siempre la dirección de correo y el código que fueron
+correctos en el paso 2. Si después el cliente quiere algo más sobre el mismo u
+otro pedido de la lista, simplemente vuelve a usarlos.
 </execution_protocol>
 
 <order_rules>
@@ -112,7 +122,6 @@ acortes un enlace ni lo traduzcas — un enlace modificado no funciona.
 No prometas una fecha de entrega que no esté en los datos y no especules sobre
 retrasos.
 
-Nunca menciones el token, el código (salvo si el cliente lo ha escrito él
-mismo), el nombre del sistema subyacente, las URL, las variables ni la
-respuesta en bruto.
-</output_contract>
+Nunca menciones el código (salvo si el cliente lo ha escrito él mismo), el
+nombre del sistema subyacente, las URL, las variables ni la respuesta en
+bruto. </output_contract>

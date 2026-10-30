@@ -505,8 +505,8 @@ route met bestelnummer, e-mail, postcode en huisnummer blijft als terugval
 klant: "waar is mijn pakket?"  →  bot vraagt e-mailadres
 POST /api/zipchat/verify {action:start}  →  mail vanuit noreply@exittoys.com
 klant typt code  →  POST /api/zipchat/verify {action:check}
-                    →  bestellingen op dat adres + token (1 uur geldig)
-klant kiest bestelling  →  POST /api/zipchat/order {token, order_id, info}
+                    →  bestellingen op dat adres; adres + code blijven 1 uur geldig
+klant kiest bestelling  →  POST /api/zipchat/order {email, code, order_id, info}
                     →  tracking of serviceportaallink
 ```
 
@@ -515,13 +515,22 @@ klant kiest bestelling  →  POST /api/zipchat/order {token, order_id, info}
   overslaan. Daarom roept de bridge de order-API's aan (`src/lib/exitOrders.ts`)
   en geeft hij bestellingen pas na een goede code. `/order` weigert elk
   ordernummer dat niet in de lijst van het bevestigde adres staat.
+* **Eén code per gesprek.** Na een goede code blijft die code met het adres een
+  uur het bewijs (elk gebruik verlengt het uur); `/order` krijgt e-mail + code.
+  Tot 30 oktober was dat een token uit het `check`-antwoord, maar Zipchat geeft
+  toolantwoorden niet mee naar de volgende beurt: zodra de klant een bestelling
+  koos, was het token weg en mailde de bot een nieuwe code (feedback Laura,
+  30 okt). Adres en code staan wél in het gesprek, want de klant typte ze.
+  Vraagt de bot toch een nieuwe code voor een adres dat nog bevestigd is, dan
+  stuurt de bridge niets (`verify.already_verified`) en zegt hij de bot de
+  code uit het gesprek te gebruiken.
 * **Grenzen** (`src/lib/verify.ts`): code 10 minuten geldig, 5 pogingen (ook
-  bij gelijktijdige gokken: de teller gaat met compare-and-set), hoogstens 3
-  codes per adres per uur en niet vaker dan elke 30 seconden. Een mislukte
-  verzending telt niet mee.
+  bij gelijktijdige gokken: de teller gaat met compare-and-set; ook na de
+  bevestiging, dan vervalt de code), hoogstens 3 codes per adres per uur en
+  niet vaker dan elke 30 seconden. Een mislukte verzending telt niet mee.
 * **Opslag** in `bridge_settings`, zonder migratie: `otp:<e-mail>` (gehashte
-  code), `otpok:<hash van token>` en `otprate:<e-mail>`. De dagelijkse
-  opschoning haalt ze na een dag weg.
+  code, lopend of bevestigd) en `otprate:<e-mail>`. De dagelijkse opschoning
+  haalt ze na een dag weg.
 * **De mail** (`src/lib/verifyMail.ts`) staat in de huisstijl en in de taal
   van de webshop van de bot (9 talen). Het logo gaat als inline bijlage mee,
   zodat het er ook staat als de mailclient afbeeldingen blokkeert.
@@ -535,7 +544,8 @@ klant kiest bestelling  →  POST /api/zipchat/order {token, order_id, info}
   `VERIFY_GRAPH_CLIENT_SECRET`, `EXIT_ORDER_API_AUTH`, `EXIT_TRACKING_API_AUTH`
   (de `dicode …`-headers uit HALO-tools 16 en 26).
 * **Logboek:** `verify.code_sent`, `verify.mail_failed`, `verify.failed`,
-  `verify.ok`, `verify.order_refused`, `verify.rate_limited`. E-mailadressen
+  `verify.ok`, `verify.already_verified`, `verify.order_refused`,
+  `verify.rate_limited`. E-mailadressen
   staan er afgekort in (`s***@domein`).
 * **Skill:** `zipchat-tool/skills/<taal>/verificatie.md`, via het sync-script
   op alle landenbots, met de variabelen `EXIT_BRIDGE_URL` (`…/api/zipchat`) en

@@ -82,9 +82,10 @@ export interface Store {
 const CURSOR_PREFIX = "forward_cursor:";
 
 /**
- * E-mailverificatie (src/lib/verify.ts), ook in bridge_settings: de lopende
- * code per e-mailadres, en een geslaagde verificatie per token. De dagelijkse
- * opschoning haalt ze na een dag weg; geldig zijn ze veel korter.
+ * E-mailverificatie (src/lib/verify.ts), ook in bridge_settings: de code per
+ * e-mailadres (lopend of bevestigd) en de verzendtijden. De dagelijkse
+ * opschoning haalt ze na een dag weg; geldig zijn ze veel korter. `otpok:` is
+ * van de oude tokenroute (tot 30 okt 2026) en staat er nog voor de opruiming.
  */
 export const VERIFY_PREFIXES = ["otp:", "otpok:", "otprate:"] as const;
 

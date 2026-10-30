@@ -54,20 +54,37 @@ vraagt de bridge eerst aan Mobile Service Cloud of er iemand online is (dezelfde
 presence-check als HALO):
 
 * **Online → live chat.** Het gesprek gaat via de Conversational Router als chat
-  naar Robin, in de webshop **HALO Livechat** (`WebStoreReferrer`, app setting
-  `CM_WEBSTORE_REFERRER`, standaard `HALO`), waar ook de chats van Tobi binnenkomen.
-  De AI gaat in Zipchat op pauze; de medewerker antwoordt in Robin en dat
-  antwoord staat binnen een paar seconden in het chatvenster, als "EXIT Toys
-  Klantenservice". Wat de klant daarna typt, gaat via de pollketting naar Robin.
-  Loopt de klant weg, dan mailt de medewerker hem vanuit Robin; het e-mailadres
-  staat bovenaan het gesprek.
+  naar Robin. De AI gaat in Zipchat op pauze; de medewerker antwoordt in Robin
+  en dat antwoord staat binnen een paar seconden in het chatvenster, als "EXIT
+  Toys Klantenservice". Wat de klant daarna typt, gaat via de pollketting naar
+  Robin. Loopt de klant weg, dan mailt de medewerker hem vanuit Robin.
 * **Offline → chat met antwoord per e-mail.** Precies zoals de
   offline-overdracht van HALO: het gesprek gaat ook via de Conversational Router
-  naar Robin en komt binnen als chat (kanaal CXWebConversations), nu in de
-  webshop van het land (`WebStoreReferrer` = de URL van de webshop). De
-  medewerker antwoordt in Robin en **Robin mailt dat antwoord zelf** naar de
-  klant ("Contact with EXIT Toys …", vanaf het adres van de webshop). Mailt de
-  klant terug, dan komt dat in hetzelfde gesprek. De AI blijft in de chat aan.
+  naar Robin en komt binnen als chat (kanaal CXWebConversations). De medewerker
+  antwoordt in Robin en **Robin mailt dat antwoord zelf** naar de klant
+  ("Contact with EXIT Toys Nederland", vanaf info@exittoys.nl). Mailt de klant
+  terug, dan komt dat in hetzelfde gesprek. De AI blijft in de chat aan.
+
+**Zo ziet het eruit in Robin** (sinds 30 okt 2026, zoals bij HALO): elke beurt
+uit de Zipchat-chat is een los chatbericht, met de tijd waarop het gezegd werd.
+De klant staat als klant, de AI als **Bot**, net als Tobi. Daarvoor stuurt de
+bridge de AI-beurten met richting `ClientTerminated`; Robin zet die op naam van
+de Bot (getest 30 okt). Het laatste bericht, ook van de Bot, heeft de gegevens:
+land, naam, e-mailadres, reden, en bij live chat de instructie. Eerder stond
+alles in één blok met Land/Naam/E-mail bovenaan, en dat las als een
+contactformulier.
+
+Elk bericht dat de bridge zo meestuurt, heeft een id dat begint met `5a1c0de0`
+en een tijd van vóór de doorzetting. Stuurt de router er een terug naar de
+webhook, dan zet de bridge het niet nog eens in het chatvenster.
+
+**Webshop:** alles landt in **EXIT Toys Nederland**, net als de
+offline-overdrachten van HALO; de medewerker verplaatst het zo nodig. De
+`WebStoreReferrer` in de handover (app setting `CM_WEBSTORE_REFERRER`,
+standaard `HALO`) verandert dat niet: Robin maakt het gesprek al aan bij het
+eerste bericht, en de handover komt daarna. Getest op 30 okt met "HALO" en met
+een webshop-URL. HALO doet de handover vóór de berichten, maar wij krijgen het
+chat-id pas bij het eerste bericht.
 
 Op het dashboard staat dit onder **Bemensing** op Automatisch; daar kun je ook
 altijd live chat of altijd e-mail vastzetten. Zonder Zipchat-gesprek-id kan er
@@ -86,7 +103,7 @@ Klant ──▶ Zipchat-widget ──▶ AI kan het niet aan
              Conversational Router (adapter "Zipchat bridge")
                               │  + mutationrequest met CustomerInfo
                               ▼
-            Robin: chat in de webshop van het land
+            Robin: chat in EXIT Toys Nederland
                               │
                  medewerker antwoordt in Robin
                               │

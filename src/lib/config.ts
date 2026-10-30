@@ -68,10 +68,10 @@ export const config = {
     /** Kanaalnaam die CM in het chat-object verwacht. */
     channel: opt("CM_CHANNEL") ?? "CXWebConversations",
     /**
-     * WebStoreReferrer bij de handover van een live chat. Robin kiest daarmee
-     * de webshop: "HALO" geeft "HALO Livechat", waar ook de chats van Tobi
-     * (HALO) binnenkomen. Een onbekende waarde valt in EXIT Toys Nederland,
-     * met het WhatsApp-autobericht van die webshop erbij.
+     * WebStoreReferrer in de handover, zoals HALO hem meestuurt ("HALO" =
+     * webshop HALO Livechat). Bij de bridge kiest hij de webshop niet: Robin
+     * heeft het gesprek dan al aangemaakt, in EXIT Toys Nederland, met het
+     * WhatsApp-autobericht van die webshop erbij (getest 30 okt 2026).
      */
     webStoreReferrer: opt("CM_WEBSTORE_REFERRER") ?? "HALO",
     /** stateNameId van de agent-state in de router (handover naar mens). */

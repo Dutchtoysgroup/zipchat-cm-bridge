@@ -239,10 +239,8 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     ? `LIVE CHAT — de klant zit nu in de chat te wachten. Antwoord hier; je bericht komt direct in het chatvenster. Is de klant weg, mail hem dan vanuit Robin op ${email ?? "zijn e-mailadres"}.`
     : null;
 
-  // Blokken worden gescheiden door een lege regel; binnen een blok staan de
-  // regels onder elkaar. Robin toont het ticket als platte tekst, dus die
-  // witruimte is het enige wat het leesbaar houdt. Alle landen komen in
-  // dezelfde inbox; het land bovenaan vertelt wie het oppakt.
+  // Regels onder elkaar; Robin toont het bericht als platte tekst. Alle landen
+  // komen in dezelfde inbox; het land vertelt wie het oppakt.
   const gegevens = [
     shop ? `Land: ${shop.country} (${shop.domain})` : null,
     name ? `Naam: ${name}` : null,
@@ -259,13 +257,17 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
         ? "LET OP: Zipchat gaf geen berichten terug voor dit gesprek."
         : null;
 
-  const header = [
+  // Zoals HALO het aan Robin geeft: het gesprek als losse chatberichten van
+  // klant en bot, en als laatste een bericht van de bot met de gegevens. Eén
+  // blok met Land/Naam/E-mail bovenaan oogde in Robin als een contactformulier
+  // (feedback klantenservice, 30 okt 2026). Zonder gesprek staat de vraag in
+  // dat laatste bericht, in de woorden van de assistent.
+  const context = [
     instructie,
-    `Overgedragen door de AI-assistent (kanaal: ${channel}).`,
+    `Doorgezet naar de klantenservice door de AI-assistent (kanaal: ${channel}).`,
     gegevens || null,
-    input.summary ? `Samenvatting door de assistent: ${input.summary}` : null,
+    !transcript && input.summary ? `Vraag van de klant: ${input.summary}` : null,
     waarschuwing,
-    transcript ? "--- Volledig gesprek ---" : null,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -313,7 +315,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
 
   const payload: cm.TwoWayPayload = {
     chat: cmChat,
-    conversationMessages: [cm.textMessage(transcript ? `${header}\n\n${transcript}` : header)],
+    conversationMessages: routerHistory(messages, context, session.createdAt),
   };
 
   const sent = await cm.sendToRouter(payload);
@@ -394,15 +396,16 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   // succesvolle (201) aanroep hier miste alsnog het e-mailadres in Robin en
   // moest handmatig gekoppeld worden. De echte koppelmethode is nog niet
   // gevonden; zie project-memory zipchat-cm-bridge voor de laatste stand.
-  // WebStoreReferrer kiest de Robin-webshop: een live chat gaat naar HALO
-  // Livechat, zoals bij Tobi; anders de webshop van het land, zodat Robin het
-  // antwoord vanuit het goede adres mailt. Kent Robin de waarde niet, dan
-  // landt het in EXIT Toys Nederland, net als de offline-overdracht van HALO.
+  // De WebStoreReferrer hierin kiest de webshop níet: Robin maakt het gesprek
+  // al aan bij het eerste bericht, en deze aanroep komt daarna. Getest op
+  // 30 okt 2026 met "HALO" en met de URL van een webshop: het gesprek landde
+  // allebei keren in EXIT Toys Nederland, net als de offline-overdracht van
+  // HALO. Bij HALO zelf gaat de handover vóór de berichten; dat kan hier niet,
+  // want het chat-id krijgen we pas bij het eerste bericht.
   const mut = await cm.requestHandoverMutation({
     chatId: realChatId,
     name,
     email,
-    referrer: liveChat ? undefined : shopUrl(shop),
   });
   await store.logEvent({
     sessionId: session.id,
@@ -444,9 +447,27 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   };
 }
 
-/** Robin koppelt een webshop aan het begin van deze URL (exittoys.fr → France). */
-function shopUrl(shop: Shop | null): string {
-  return shop ? `https://www.${shop.domain}/` : "https://www.exittoys.com/";
+/**
+ * De berichten voor de router: elke beurt uit Zipchat apart, met de tijd uit
+ * Zipchat, en daarna het bericht met de gegevens. Alles krijgt een tijd vóór
+ * `escalatedAt`, zodat de bridge het niet als antwoord van een medewerker ziet
+ * als de router het terugstuurt. Zipchat geeft hele seconden; een milliseconde
+ * erbij per bericht houdt de volgorde in Robin gelijk aan die in de chat.
+ */
+function routerHistory(messages: zipchat.ZipchatMessage[], context: string, escalatedAt: Date): cm.TwoWayTextMessage[] {
+  const out: cm.TwoWayTextMessage[] = [];
+  let last = 0;
+  for (const m of [...messages].sort(byMessageId)) {
+    const text = zipchat.messageText(m).trim();
+    if (!text) continue;
+    const at = Math.max(parseAt(m.created_at)?.getTime() ?? escalatedAt.getTime() - 2000, last + 1);
+    last = at;
+    const direction = m.role === "user" ? "ClientOriginated" : "ClientTerminated";
+    out.push(cm.historyMessage(text, direction, new Date(at)));
+  }
+  const contextAt = Math.max(last + 1, escalatedAt.getTime() - 1000);
+  out.push(cm.historyMessage(context, "ClientTerminated", new Date(contextAt)));
+  return out;
 }
 
 /**
@@ -466,7 +487,7 @@ async function escalateViaRobin(p: {
   transcript: string;
 }): Promise<EscalateResult | null> {
   // De URL van de webshop bepaalt in welke Robin-webshop het gesprek landt.
-  const referrer = shopUrl(p.shop);
+  const referrer = p.shop ? `https://www.${p.shop.domain}/` : "https://www.exittoys.com/";
   const content = [
     `Doorgezet door de AI-assistent in de chat van ${p.shop?.domain ?? "EXIT Toys"}${p.shop ? ` (${p.shop.country})` : ""}.`,
     // Robin citeert dit bericht in elk antwoord aan de klant; daar hoort het
@@ -573,7 +594,7 @@ export async function handleAgentReply(payload: cm.TwoWayPayload): Promise<{ ok:
     return { ok: false, delivered: 0, message: "Onbekende chat — geen gekoppelde Zipchat-sessie." };
   }
 
-  const texts = cm.extractInboundTexts(payload);
+  const texts = cm.extractInboundTexts(payload, session.createdAt);
   if (texts.length === 0) {
     await store.logEvent({
       sessionId: session.id,

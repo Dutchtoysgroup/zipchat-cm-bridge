@@ -498,7 +498,7 @@ export default function Dashboard({ user }: { user: string | null }) {
                         <h2>Bemensing</h2>
                         <p className="uitleg">
                           {mode === "auto"
-                            ? "Zoals HALO: is er in Mobile Service Cloud iemand online, dan komt het gesprek als live chat in Robin (webshop HALO Livechat) en antwoordt de medewerker in het chatvenster. Anders komt het als chat in de webshop van het land, en mailt Robin het antwoord."
+                            ? "Zoals HALO: is er in Mobile Service Cloud iemand online, dan komt het gesprek als live chat in Robin en antwoordt de medewerker in het chatvenster. Anders komt het ook als chat in Robin, en mailt Robin het antwoord."
                             : mode === "livechat"
                               ? "Handmatig vastgezet: elke doorzetting wordt een live chat, ook als MSC offline meldt."
                               : mode === "email"

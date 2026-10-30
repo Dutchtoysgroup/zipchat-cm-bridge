@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { config } from "./config";
 import { requestJson, type ApiResult } from "./http";
 
@@ -79,6 +79,29 @@ export function textMessage(
   return { $type: "text", direction, createdOn: new Date().toISOString(), text };
 }
 
+/**
+ * Begin van het id van elk bericht dat de bridge als gespreksgeschiedenis
+ * meestuurt. CM wil een GUID als id; met dit vaste begin herkennen we onze
+ * eigen berichten als de router ze ooit terugstuurt.
+ */
+const HISTORY_ID_PREFIX = "5a1c0de0";
+
+/**
+ * Eén beurt uit het Zipchat-gesprek, zoals HALO hem aan Robin geeft: de klant
+ * als ClientOriginated, de AI als ClientTerminated. Robin zet dat laatste op
+ * naam van de Bot, net als de berichten van Tobi (getest 30 okt 2026), met de
+ * tijd waarop het echt gezegd werd.
+ */
+export function historyMessage(
+  text: string,
+  direction: TwoWayTextMessage["direction"],
+  createdOn: Date,
+): TwoWayTextMessage {
+  const rest = randomUUID().replace(/-/g, "").slice(8);
+  const id = `${HISTORY_ID_PREFIX}-${rest.slice(0, 4)}-${rest.slice(4, 8)}-${rest.slice(8, 12)}-${rest.slice(12, 24)}`;
+  return { $type: "text", id, direction, createdOn: createdOn.toISOString(), text };
+}
+
 /* --------------------------------------------------------------- Outbound */
 
 function twowayUrl(): string {
@@ -154,12 +177,21 @@ export async function endSession(cmChatId: string): Promise<ApiResult<unknown>> 
 
 /* ---------------------------------------------------------------- Inbound */
 
-/** Haal de bruikbare tekstberichten uit een inkomende TwoWay-payload. */
-export function extractInboundTexts(payload: TwoWayPayload): string[] {
+/**
+ * Haal de bruikbare tekstberichten uit een inkomende TwoWay-payload. Berichten
+ * van vóór `escalatedAt` of met ons eigen id zijn de AI-beurten die we zelf als
+ * geschiedenis meestuurden; die horen niet nog eens in het chatvenster.
+ */
+export function extractInboundTexts(payload: TwoWayPayload, escalatedAt?: Date): string[] {
   return (payload.conversationMessages ?? [])
     .filter((m) => String(m.$type).toLowerCase() === "text" && typeof m.text === "string" && m.text.trim() !== "")
     // ClientTerminated = richting klant, dus afkomstig van de agent in MSC.
     .filter((m) => m.direction !== "ClientOriginated")
+    .filter((m) => !(typeof m.id === "string" && m.id.toLowerCase().startsWith(HISTORY_ID_PREFIX)))
+    .filter((m) => {
+      const at = m.createdOn ? new Date(m.createdOn) : null;
+      return !(escalatedAt && at && !Number.isNaN(at.getTime()) && at < escalatedAt);
+    })
     .map((m) => htmlToText(m.text))
     .filter((t) => t !== "");
 }

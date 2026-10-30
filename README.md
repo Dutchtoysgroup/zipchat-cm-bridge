@@ -93,7 +93,16 @@ Dat werkt alleen als in de router de regel **Zipchat bridge → Robin uit
 staat** (zie
 [Wat er aan de CM-kant moet gebeuren](#wat-er-aan-de-cm-kant-moet-gebeuren)).
 Van 20 tot 30 okt stond hij aan: dan kreeg Robin de berichten meteen, maakte
-het gesprek aan in EXIT Toys Nederland en negeerde de handover. Het e-mailadres bleef leeg, dus Robin kon niet mailen.
+het gesprek aan in EXIT Toys Nederland en negeerde de handover. Het
+e-mailadres bleef leeg, dus Robin kon niet mailen.
+
+**Offline sluit de bridge daarna de routersessie af** (`POST
+…/chats/{chat}/routing/reset`, 5 seconden na de handover). Zolang de sessie
+loopt, staat de klant in Robin groen ("online") en gaat een antwoord alleen
+als chatbericht, dat bij niemand aankomt. Met de sessie dicht staat hij grijs
+en mailt Robin het antwoord; antwoordt de klant op die mail, dan komt dat in
+hetzelfde gesprek (getest 30 okt). Bij live chat blijft de sessie open, want
+daar moet het antwoord in het chatvenster komen.
 
 Mislukt de handover, dan probeert de bridge het nog één keer. Lukt het dan nog
 niet, dan maakt hij offline een Online-gesprek aan; bij live chat krijgt de

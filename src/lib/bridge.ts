@@ -385,6 +385,24 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     return { ok: false, sessionId: session.id, message: `Doorzetten naar CM mislukt: ${error}` };
   }
 
+  // Offline: de routersessie afsluiten, zodat Robin de klant niet als online
+  // ziet en het antwoord mailt, zoals bij HALO offline. Een paar seconden
+  // wachten, zodat Robin het gesprek eerst heeft aangemaakt (zo getest).
+  if (!liveChat) {
+    if (!config.mockCm) await new Promise((r) => setTimeout(r, 5_000));
+    const reset = await cm.resetRouting(realChatId, "Offline doorgezet; antwoord per e-mail");
+    await store.logEvent({
+      sessionId: session.id,
+      direction: "bridge->cm",
+      kind: "escalate.session_reset",
+      ok: reset.ok,
+      statusCode: reset.status,
+      summary: reset.ok
+        ? "Routersessie afgesloten: Robin mailt het antwoord"
+        : `Routersessie afsluiten mislukt: ${reset.error}. Robin antwoordt dan mogelijk alleen in de chat`,
+    });
+  }
+
   // 5b. Onafhankelijk van CM: de klantenservice per e-mail op de hoogte stellen.
   // Dit pad blijft werken ook als de router onderweg iets laat liggen.
   const mail = await sendEscalationMail({

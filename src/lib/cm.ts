@@ -260,6 +260,28 @@ export async function ping(): Promise<ApiResult<unknown>> {
   return res;
 }
 
+/**
+ * Sluit de routersessie van deze chat af. Robin ziet de klant dan niet meer
+ * als online (grijs in plaats van groen) en mailt het antwoord, zoals bij een
+ * offline-overdracht van HALO. Zolang de sessie loopt, gaat het antwoord
+ * alleen als chatbericht. Getest op 30 okt 2026: het gesprek blijft in Robin
+ * staan. Let op: de reset draait ook eerdere mutaties voor deze chat terug.
+ * Het endpoint uit de documentatie (`PUT …/session/end` op api.cm.com) geeft
+ * 403 met ons producttoken; dit endpoint werkt wel.
+ */
+export async function resetRouting(chatId: string, reason: string): Promise<ApiResult<unknown>> {
+  if (config.mockCm) return mock({ note: "mock: geen reset verstuurd", chatId });
+  const url = `${config.cm.conversationalControlBaseUrl}/accounts/${config.cm.logicalAccountId}/chats/${chatId}/routing/reset`;
+  return requestJson(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CM-PRODUCTTOKEN": config.cm.productToken ?? "",
+    },
+    body: JSON.stringify({ Reason: reason }),
+  });
+}
+
 /* ------------------------------------------------- Handover via mutationrequest */
 
 /**

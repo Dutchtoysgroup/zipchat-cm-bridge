@@ -13,10 +13,8 @@
  * Env:
  *   ZIPCHAT_API_TOKEN       user-token (zcu-…), verplicht
  *   MSC_BRIDGE_SECRET       = BRIDGE_SHARED_SECRET van de bridge
- *   EXIT_ORDER_API_AUTH     Authorization-header voor exittoys.com/halo.json
- *   EXIT_TRACKING_API_AUTH  Authorization-header voor exittoys.com/robin
  *   MSC_BRIDGE_URL          optioneel, standaard het escalate-endpoint op Azure
- *   EXIT_BRIDGE_URL         optioneel, standaard /api/zipchat op Azure (e-mailcode)
+ *   EXIT_BRIDGE_URL         optioneel, standaard /api/zipchat op Azure (bestelvragen)
  *
  * Variabelen zijn in Zipchat alleen-schrijven. Ontbreekt er een op een bot, dan
  * maakt het script hem aan met de waarde uit de env. Een bestaande variabele
@@ -47,11 +45,9 @@ const VARIABLE_VALUES = {
   MSC_BRIDGE_URL:
     process.env.MSC_BRIDGE_URL ?? "https://dtg-zipchat-cm-bridge-weu.azurewebsites.net/api/zipchat/escalate",
   MSC_BRIDGE_SECRET: process.env.MSC_BRIDGE_SECRET,
-  // Basis van /verify en /order (bestellingen met e-mailcode, src/lib/verify.ts).
+  // Basis van /verify en /order (bestelvragen, src/lib/verify.ts).
   EXIT_BRIDGE_URL:
     process.env.EXIT_BRIDGE_URL ?? "https://dtg-zipchat-cm-bridge-weu.azurewebsites.net/api/zipchat",
-  EXIT_ORDER_API_AUTH: process.env.EXIT_ORDER_API_AUTH,
-  EXIT_TRACKING_API_AUTH: process.env.EXIT_TRACKING_API_AUTH,
 };
 
 const { bots } = JSON.parse(readFileSync(join(ROOT, "zipchat-tool/bots.json"), "utf8"));

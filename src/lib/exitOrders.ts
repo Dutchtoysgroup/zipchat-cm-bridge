@@ -5,13 +5,18 @@ import { requestJson } from "./http";
  * De order-API's van de webshop (Dicode): `halo.json` voor bestellingen en
  * serviceportaallinks, `robin` voor tracking. Dezelfde aanroepen als HALO-tools
  * 16, 18 en 26. De assistent roept ze bij de e-mailverificatie niet zelf aan;
- * de bridge doet dat pas na een goede code (src/lib/verify.ts).
+ * de bridge doet dat pas na een goede code of een kloppende combinatie van
+ * bestelnummer, postcode en huisnummer (src/lib/verify.ts).
  *
- * halo.json geeft altijd HTTP 200; een lege body betekent "niets gevonden".
- * Zonder gevulde `conversationid` is de body ook leeg, zie de README.
+ * halo.json geeft altijd HTTP 200; niets gevonden is een lege body, `{}` of
+ * `{"orders":[]}`. Zonder gevulde `conversationid` is de body ook leeg, en
+ * zonder de sleutel `email` (leeg mag) komt er `{}`. Zie de README.
  */
 
 export type OrdersResult = { ok: boolean; empty: boolean; body: unknown; error?: string };
+
+/** Elke niet-lege waarde werkt; de assistent weet het gesprek-id niet altijd. */
+const GEEN_GESPREK = "onbekend";
 
 const ENT: Record<string, string> = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
@@ -41,16 +46,17 @@ function isEmpty(body: unknown): boolean {
   if (typeof body === "object") {
     const o = body as Record<string, unknown>;
     if ("raw" in o && Object.keys(o).length === 1) return String(o.raw ?? "").trim() === "";
+    if (Array.isArray(o.orders)) return o.orders.length === 0;
     return Object.keys(o).length === 0;
   }
   return false;
 }
 
-async function haloJson(params: Record<string, string | undefined>): Promise<OrdersResult> {
+async function haloJson(params: Record<string, string>, conversationId?: string): Promise<OrdersResult> {
   if (!config.exitOrders.orderAuth) return { ok: false, empty: true, body: null, error: "EXIT_ORDER_API_AUTH niet ingesteld" };
-  const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) if (v) qs.set(k, v);
-  const res = await requestJson<unknown>(`${config.exitOrders.baseUrl}/halo.json?${qs}`, {
+  const qs = new URLSearchParams({ ...params, conversationid: conversationId?.trim() || GEEN_GESPREK });
+  // %20 in plaats van +: zo ging een postcode met spatie ook vanuit de skills.
+  const res = await requestJson<unknown>(`${config.exitOrders.baseUrl}/halo.json?${qs.toString().replace(/\+/g, "%20")}`, {
     method: "GET",
     timeoutMs: 20_000,
     headers: { Authorization: config.exitOrders.orderAuth, Accept: "application/json" },
@@ -62,17 +68,31 @@ async function haloJson(params: Record<string, string | undefined>): Promise<Ord
 
 /** Alle bestellingen op een e-mailadres (HALO-tool 16). */
 export function ordersByEmail(email: string, conversationId?: string): Promise<OrdersResult> {
-  return haloJson({ email, conversationid: conversationId });
+  return haloJson({ email }, conversationId);
 }
 
-/** Serviceportaallink voor retour of klacht bij één bestelling (HALO-tool 18). */
+/** Bestelling op bestelnummer, postcode en huisnummer, zonder e-mailadres (HALO-tool 17). */
+export function ordersByAddress(
+  orderNumber: string,
+  zip: string,
+  houseNumber: string,
+  conversationId?: string,
+): Promise<OrdersResult> {
+  return haloJson({ email: "", zip, housenumber: houseNumber, ordernumber: orderNumber }, conversationId);
+}
+
+/**
+ * Serviceportaallink voor retour of klacht bij één bestelling (HALO-tool 18).
+ * De API geeft de link op alleen het nummer, ook met een leeg `email`: controleer
+ * de bestelling dus eerst.
+ */
 export function portalLink(
   email: string,
   orderId: string,
   agent: "retour" | "klacht",
   conversationId?: string,
 ): Promise<OrdersResult> {
-  return haloJson({ email, orderid: orderId, agent, conversationid: conversationId });
+  return haloJson({ email, orderid: orderId, agent }, conversationId);
 }
 
 /**
@@ -94,6 +114,24 @@ export function ownsOrder(body: unknown, orderId: string): boolean {
     return false;
   };
   return walk(body, "");
+}
+
+const nummerVorm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+
+/**
+ * De bestelling met dit nummer uit een antwoord van halo.json, anders null.
+ * Strenger dan ownsOrder: alleen `orders[].number` telt. Komt er iets anders
+ * terug, dan is er geen bewijs dat de combinatie klopt, en dan geven we niets.
+ */
+export function findOrder(body: unknown, orderNumber: string): Record<string, unknown> | null {
+  const wanted = nummerVorm(orderNumber);
+  const list = (body as { orders?: unknown } | null | undefined)?.orders;
+  if (wanted.length < 4 || !Array.isArray(list)) return null;
+  const hit = list.find((o) => {
+    const n = (o as { number?: unknown } | null | undefined)?.number;
+    return (typeof n === "string" || typeof n === "number") && nummerVorm(String(n)) === wanted;
+  });
+  return (hit as Record<string, unknown> | undefined) ?? null;
 }
 
 export type Tracking = { ok: boolean; trackingNumber: string | null; trackingUrl: string | null; error?: string };

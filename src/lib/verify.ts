@@ -29,9 +29,14 @@ import * as orders from "./exitOrders";
  * controle in de flow; hier kan de assistent alleen curl draaien, dus moet de
  * controle aan deze kant.
  *
+ * De terugvalroute (orderInfoByAddress) werkt zonder e-mailadres: bestelnummer,
+ * postcode en huisnummer zijn samen het bewijs. Die zijn te raden, dus telt de
+ * bridge ook daar de pogingen.
+ *
  * Alles staat in bridge_settings (geen migratie nodig), de code gehasht:
  *   otp:<e-mail>          code: hash, geldig tot, pogingen, al bevestigd?
  *   otprate:<e-mail>      tijdstippen van verstuurde codes (tegen spammen)
+ *   ordertry:<hash>       foute pogingen op een bestelnummer of een adres
  */
 
 const CODE_MINUTES = 10;
@@ -41,6 +46,9 @@ const SESSION_MINUTES = 60;
 /** Hoogstens zoveel codes per adres per uur, en niet sneller dan elke 30 s. */
 const MAX_SENDS_PER_HOUR = 3;
 const MIN_SEND_GAP_MS = 30_000;
+/** Zoveel pogingen per bestelnummer en per adres, tot er één klopt. */
+const MAX_LOOKUP_ATTEMPTS = 5;
+const LOOKUP_WINDOW_MS = 24 * 60 * 60_000;
 
 type Pending = { hash: string; until: number; attempts: number; chatId?: string; verified?: boolean };
 
@@ -420,7 +428,17 @@ export async function orderInfo(input: {
     };
   }
 
-  if (input.info === "tracking") {
+  return orderDetails(input.info, orderId, norm(email), input.conversationId);
+}
+
+/** Tracking of portaallink van een bestelling die al gecontroleerd is. */
+async function orderDetails(
+  info: "tracking" | "retour" | "klacht",
+  orderId: string,
+  email: string,
+  conversationId?: string,
+): Promise<VerifyReply> {
+  if (info === "tracking") {
     const t = await orders.tracking(orderId);
     if (!t.ok) return { ok: false, message: "De tracking kon nu niet worden opgehaald. Bied aan door te verbinden." };
     return {
@@ -430,11 +448,11 @@ export async function orderInfo(input: {
       tracking_url: t.trackingUrl,
       message: t.trackingUrl
         ? "Geef het trackingnummer en de link, teken voor teken."
-        : "Er is (nog) geen tracking. Kijk naar de orderstatus in de lijst en zeg alleen wat daaruit blijkt.",
+        : "Er is (nog) geen tracking. Kijk naar de orderstatus van de bestelling en zeg alleen wat daaruit blijkt.",
     };
   }
 
-  const portal = await orders.portalLink(norm(email), orderId, input.info, input.conversationId);
+  const portal = await orders.portalLink(email, orderId, info, conversationId);
   if (!portal.ok || portal.empty) {
     return {
       ok: false,
@@ -448,4 +466,148 @@ export async function orderInfo(input: {
     result: portal.body,
     message: "Geef de serviceportaallink uit 'result', teken voor teken, met één zin uitleg.",
   };
+}
+
+/* ---------------------------------------------- terugval zonder e-mailadres */
+
+type LookupAttempts = { count: number; until: number };
+
+/**
+ * Teller per bestelnummer én per adres: de eerste houdt het raden van een adres
+ * bij een bekend nummer tegen, de tweede het raden van nummers bij een bekend
+ * adres. Schrijfwijze telt niet mee ("1234 AB" = "1234ab"). De sleutel is
+ * gehasht, zodat er geen adressen in bridge_settings komen.
+ */
+function lookupKey(soort: "order" | "adres", waarde: string): string {
+  const vorm = waarde.toLowerCase().replace(/[^\p{L}\p{N}|]/gu, "");
+  const key = config.bridgeSecret ?? "dev-zonder-geheim";
+  return `ordertry:${createHmac("sha256", key).update(`${soort}:${vorm}`).digest("hex")}`;
+}
+
+/**
+ * Tel een poging, vóór de aanroep en met compare-and-set, net als bij de code:
+ * tien gelijktijdige gokken tellen als tien. Geeft de resterende pogingen terug,
+ * null = op.
+ */
+async function takeLookupAttempt(key: string): Promise<number | null> {
+  for (let i = 0; i < 5; i++) {
+    const raw = await store.getSetting(key);
+    const cur = parse<LookupAttempts>(raw);
+    const live = cur && cur.until > Date.now() ? cur : { count: 0, until: Date.now() + LOOKUP_WINDOW_MS };
+    if (live.count >= MAX_LOOKUP_ATTEMPTS) return null;
+    const next = { ...live, count: live.count + 1 };
+    if (await store.compareAndSetSetting(key, raw, JSON.stringify(next))) return MAX_LOOKUP_ATTEMPTS - next.count;
+  }
+  return null;
+}
+
+/** Een storing bij de order-API is geen gok: die poging telt niet. */
+async function returnLookupAttempt(key: string): Promise<void> {
+  for (let i = 0; i < 5; i++) {
+    const raw = await store.getSetting(key);
+    const cur = parse<LookupAttempts>(raw);
+    if (!cur || cur.count <= 0) return;
+    if (await store.compareAndSetSetting(key, raw, JSON.stringify({ ...cur, count: cur.count - 1 }))) return;
+  }
+}
+
+/**
+ * Tracking of portaallink met bestelnummer, postcode en huisnummer. De bridge
+ * controleert de combinatie zelf bij halo.json en vraagt pas daarna iets op:
+ * `orderid=…&agent=…` geeft de link op alleen het nummer, dus zonder deze
+ * controle kan de assistent hem met elk nummer ophalen.
+ */
+export async function orderInfoByAddress(input: {
+  orderNumber?: string;
+  zip?: string;
+  houseNumber?: string;
+  info?: "list" | "tracking" | "retour" | "klacht";
+  conversationId?: string;
+}): Promise<VerifyReply> {
+  const orderNumber = (input.orderNumber ?? "").trim();
+  const zip = (input.zip ?? "").trim();
+  const houseNumber = (input.houseNumber ?? "").trim();
+  if (!orderNumber || !zip || !houseNumber) {
+    return {
+      ok: false,
+      verified: false,
+      message:
+        "Geef bestelnummer, postcode en huisnummer, alle drie zoals de klant ze typte. Vraag de klant om wat " +
+        "ontbreekt en vul nooit zelf iets in.",
+    };
+  }
+  const info = input.info;
+  if (info !== "tracking" && info !== "retour" && info !== "klacht") {
+    return { ok: false, verified: false, message: 'Geef bij "info" aan wat de klant wil: "tracking", "retour" of "klacht".' };
+  }
+
+  const keys = [lookupKey("order", orderNumber), lookupKey("adres", `${zip}|${houseNumber}`)];
+  const left: number[] = [];
+  for (const key of keys) {
+    const n = await takeLookupAttempt(key);
+    if (n === null) {
+      await store.logEvent({
+        direction: "zipchat->bridge",
+        kind: "verify.address_locked",
+        ok: false,
+        summary: "Bestelling zoeken met postcode en huisnummer geweigerd: te vaak fout",
+        payload: { conversationId: input.conversationId, info },
+      });
+      return {
+        ok: false,
+        verified: false,
+        reason: "te vaak fout",
+        message:
+          "Deze gegevens zijn te vaak verkeerd ingevuld; je kunt er nu niet verder mee zoeken. Probeer geen " +
+          "andere combinaties. Bied aan de bestelling op te zoeken met een code per e-mail of door te verbinden.",
+      };
+    }
+    left.push(n);
+  }
+
+  const found = await orders.ordersByAddress(orderNumber, zip, houseNumber, input.conversationId);
+  if (!found.ok) {
+    for (const key of keys) await returnLookupAttempt(key);
+    return {
+      ok: false,
+      verified: false,
+      reason: "storing",
+      message: "De bestelling kon nu niet worden gecontroleerd. Dat ligt niet aan de klant. Bied aan door te verbinden.",
+    };
+  }
+
+  const order = orders.findOrder(found.body, orderNumber);
+  if (!order) {
+    await store.logEvent({
+      direction: "zipchat->bridge",
+      kind: "verify.address_refused",
+      ok: false,
+      summary: `Geen bestelling bij bestelnummer ${orderNumber} met deze postcode en dit huisnummer`,
+      payload: { conversationId: input.conversationId, info },
+    });
+    return {
+      ok: false,
+      verified: false,
+      reason: "geen bestelling",
+      attempts_left: Math.min(...left),
+      message:
+        "Met deze gegevens is geen bestelling te vinden. Vraag de klant ze na te kijken: bestelnummer, postcode " +
+        "en huisnummer moeten van dezelfde bestelling zijn. Probeer zelf geen varianten. Lukt het daarna niet, " +
+        "bied dan aan door te verbinden.",
+    };
+  }
+
+  // Klopt: de klant mag er vaker naar vragen zonder tegen de limiet te lopen.
+  for (const key of keys) await store.deleteSetting(key);
+  const orderId = String(order.number).trim();
+  await store.logEvent({
+    direction: "zipchat->bridge",
+    kind: "verify.address_ok",
+    summary: `Bestelling ${orderId} gevonden met postcode en huisnummer (${info})`,
+    payload: { conversationId: input.conversationId, info },
+  });
+
+  // Alleen deze bestelling: halo.json kan meer teruggeven op hetzelfde adres.
+  const details = await orderDetails(info, orderId, "", input.conversationId);
+  return { ...details, verified: true, order };
 }

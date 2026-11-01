@@ -55,9 +55,9 @@
   "vorigeNamen": {},
   "variabelen": {
     "doorzetten": ["MSC_BRIDGE_URL", "MSC_BRIDGE_SECRET"],
-    "tracking": ["EXIT_ORDER_API_AUTH", "EXIT_TRACKING_API_AUTH"],
-    "retour": ["EXIT_ORDER_API_AUTH"],
-    "klacht": ["EXIT_ORDER_API_AUTH"],
+    "tracking": ["EXIT_BRIDGE_URL", "MSC_BRIDGE_SECRET"],
+    "retour": ["EXIT_BRIDGE_URL", "MSC_BRIDGE_SECRET"],
+    "klacht": ["EXIT_BRIDGE_URL", "MSC_BRIDGE_SECRET"],
     "verificatie": ["EXIT_BRIDGE_URL", "MSC_BRIDGE_SECRET"]
   }
 }

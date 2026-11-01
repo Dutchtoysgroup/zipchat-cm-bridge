@@ -531,7 +531,11 @@ zoeken daarop dus een dag blokkeren; de e-mailcode blijft dan werken.
 * `orderid=…&agent=retour|klacht` geeft de portaallink op alleen het nummer.
   Roep `portalLink` dus nooit aan zonder eerst de bestelling te controleren.
 
-FR (`20749`) staat buiten de sync: daar roept de tool `halo.json` nog zelf aan.
+FR (`20749`) staat buiten de sync en is met de hand bijgewerkt: ook daar zijn de
+drie gegevens genoeg, maar de tool roept `halo.json` nog zelf aan, dus zonder
+controle en pogingenlimiet in de bridge. De bronteksten daarvan zijn
+`zipchat-tool/bestelling-tracking.md`, `retour-aanvragen.md`, `klacht-melden.md`
+en `master-prompt-fr.md`.
 
 Eerst de bridge deployen, dan pas de skills syncen: de oude bridge kent de velden
 `ordernumber`, `zip` en `housenumber` niet en weigert de aanroep van de nieuwe

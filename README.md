@@ -263,7 +263,7 @@ Wil je lokaal een echte database, zet dan `DATABASE_URL` op een eigen Postgres
 | `POST /api/zipchat/escalate` | de Zipchat custom tool | escalatie starten |
 | `POST /api/zipchat/marketing` | Zipchat-tool op de social-media-agent | samenwerkingsaanvraag mailen naar marketing |
 | `POST /api/zipchat/verify` | skill "Bestelling opzoeken met e-mailcode" | e-mailcode sturen (`start`) en controleren (`check`) |
-| `POST /api/zipchat/order` | dezelfde skill | tracking of serviceportaallink voor een bevestigde bestelling |
+| `POST /api/zipchat/order` | dezelfde skill en de skills tracking, retour en klacht | tracking of serviceportaallink, na een goede e-mailcode of een kloppende combinatie van bestelnummer, postcode en huisnummer |
 | `POST /api/cm/webhook` | de Conversational Router | agent-antwoord bezorgen |
 | `POST /api/cm/handover` | de Conversational Router | handover-status bijwerken |
 | `POST /api/cm/event` | de Conversational Router | router-events, sluit de sessie bij RouterSessionEnded |
@@ -462,8 +462,8 @@ node scripts/zipchat-sync.mjs --apply    # doorvoeren (--only 22066 voor één b
 ```
 
 Env: `ZIPCHAT_API_TOKEN`, en voor het aanmaken van ontbrekende variabelen
-`MSC_BRIDGE_SECRET` (= `BRIDGE_SHARED_SECRET`), `EXIT_ORDER_API_AUTH` en
-`EXIT_TRACKING_API_AUTH` (de `dicode …`-headers uit HALO-tools 17 en 26).
+`MSC_BRIDGE_SECRET` (= `BRIDGE_SHARED_SECRET`). De order-API-sleutels staan alleen
+op de bridge; de skills hebben ze niet meer nodig.
 Zipchat geeft variabelen nooit terug; een bestaande variabele krijgt alleen een
 nieuwe waarde met `--set-variables`. Een wijziging in het dashboard aan een
 beheerde skill of aan het blok tussen de `EXIT-regels`-markers in de prompt
@@ -503,19 +503,40 @@ de bestellingen op dat adres en kiest de klant om welke het gaat.
 en huisnummer zijn samen genoeg voor tracking of de serviceportaallink. De bot
 gebruikt deze route als de klant zijn e-mailadres niet weet of niet wil geven,
 geen code krijgt, er geen bestellingen op het adres staan, of de klant de drie
-gegevens al gaf. `halo.json` is daarbij kieskeurig:
+gegevens al gaf.
+
+Ook hier controleert de bridge, niet de bot. De skills roepen alleen
+`POST /api/zipchat/order {ordernumber, zip, housenumber, info}` aan en hebben geen
+order-API-sleutels meer. De bridge vraagt eerst de bestelling op en haalt pas
+tracking of de portaallink op als `orders[].number` overeenkomt met het gevraagde
+nummer; de bot krijgt alleen die ene bestelling terug.
+
+**Pogingenlimiet** (`src/lib/verify.ts`): postcode en huisnummer zijn te raden,
+dus hoogstens 5 pogingen per 24 uur per bestelnummer én per adres, ook bij
+gelijktijdige gokken (compare-and-set). Daarna telt ook de goede combinatie niet
+meer en biedt de bot de e-mailcode of doorverbinden aan. Schrijfwijze omzeilt het
+niet (`1234 AB` = `1234ab`). Een goede combinatie zet beide tellers terug, en een
+storing bij de order-API telt niet mee. Iemand die een bestelnummer kent, kan het
+zoeken daarop dus een dag blokkeren; de e-mailcode blijft dan werken.
+
+`halo.json` is kieskeurig; `src/lib/exitOrders.ts` vangt dit op:
 
 * `conversationid` moet gevuld zijn; zonder (of leeg) komt er een lege body.
-  Elke niet-lege waarde werkt. De skills sturen het gesprek-id mee.
+  Elke niet-lege waarde werkt. Weet de bot het id niet, dan stuurt de bridge
+  `onbekend`.
 * `email=` moet in de URL staan, leeg mag; ontbreekt de sleutel, dan komt `{}`
   terug. De waarde telt niet mee: postcode, huisnummer en bestelnummer moeten
   kloppen, een fout e-mailadres maakt niet uit.
 * Niets gevonden is een lege body, `{}` of `{"orders":[]}`.
-* `orderid=…&agent=retour|klacht` geeft de portaallink op alleen het nummer. De
-  controle zit dus in stap 1 van de skill; de bot mag stap 2 alleen uitvoeren
-  met een nummer dat stap 1 teruggaf.
+* `orderid=…&agent=retour|klacht` geeft de portaallink op alleen het nummer.
+  Roep `portalLink` dus nooit aan zonder eerst de bestelling te controleren.
 
-FR (`20749`) staat buiten de sync en heeft deze wijziging niet.
+FR (`20749`) staat buiten de sync: daar roept de tool `halo.json` nog zelf aan.
+
+Eerst de bridge deployen, dan pas de skills syncen: de oude bridge kent de velden
+`ordernumber`, `zip` en `housenumber` niet en weigert de aanroep van de nieuwe
+skills. De tests draaien met `npm test`, tegen een nep-`halo.json` die de
+eigenaardigheden hierboven nadoet.
 
 ```
 klant: "waar is mijn pakket?"  →  bot vraagt e-mailadres
@@ -545,8 +566,9 @@ klant kiest bestelling  →  POST /api/zipchat/order {email, code, order_id, inf
   bevestiging, dan vervalt de code), hoogstens 3 codes per adres per uur en
   niet vaker dan elke 30 seconden. Een mislukte verzending telt niet mee.
 * **Opslag** in `bridge_settings`, zonder migratie: `otp:<e-mail>` (gehashte
-  code, lopend of bevestigd) en `otprate:<e-mail>`. De dagelijkse opschoning
-  haalt ze na een dag weg.
+  code, lopend of bevestigd), `otprate:<e-mail>` en `ordertry:<hash>` (pogingen
+  op de terugvalroute, gehasht zodat er geen adressen in staan). De dagelijkse
+  opschoning haalt ze na een dag weg.
 * **De mail** (`src/lib/verifyMail.ts`) staat in de huisstijl en in de taal
   van de webshop van de bot (9 talen). Het logo gaat als inline bijlage mee,
   zodat het er ook staat als de mailclient afbeeldingen blokkeert.
@@ -561,12 +583,13 @@ klant kiest bestelling  →  POST /api/zipchat/order {email, code, order_id, inf
   (de `dicode …`-headers uit HALO-tools 16 en 26).
 * **Logboek:** `verify.code_sent`, `verify.mail_failed`, `verify.failed`,
   `verify.ok`, `verify.already_verified`, `verify.order_refused`,
-  `verify.rate_limited`. E-mailadressen
-  staan er afgekort in (`s***@domein`).
+  `verify.rate_limited`, en voor de terugvalroute `verify.address_ok`,
+  `verify.address_refused` en `verify.address_locked`. E-mailadressen staan er
+  afgekort in (`s***@domein`), postcode en huisnummer helemaal niet.
 * **Skill:** `zipchat-tool/skills/<taal>/verificatie.md`, via het sync-script
   op alle landenbots, met de variabelen `EXIT_BRIDGE_URL` (`…/api/zipchat`) en
-  `MSC_BRIDGE_SECRET`. De tracking-, retour- en klachtskills zeggen dat ze de
-  terugval zijn.
+  `MSC_BRIDGE_SECRET`. De tracking-, retour- en klachtskills zijn de terugval en
+  gebruiken dezelfde twee variabelen.
 
 ## Samenwerkingsaanvragen naar marketing
 

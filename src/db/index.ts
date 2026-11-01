@@ -84,10 +84,11 @@ const CURSOR_PREFIX = "forward_cursor:";
 /**
  * E-mailverificatie (src/lib/verify.ts), ook in bridge_settings: de code per
  * e-mailadres (lopend of bevestigd) en de verzendtijden. De dagelijkse
- * opschoning haalt ze na een dag weg; geldig zijn ze veel korter. `otpok:` is
+ * opschoning haalt ze na een dag weg; geldig zijn ze hooguit zo lang. `otpok:` is
  * van de oude tokenroute (tot 30 okt 2026) en staat er nog voor de opruiming.
+ * `ordertry:` telt de pogingen op de terugvalroute zonder e-mailadres.
  */
-export const VERIFY_PREFIXES = ["otp:", "otpok:", "otprate:"] as const;
+export const VERIFY_PREFIXES = ["otp:", "otpok:", "otprate:", "ordertry:"] as const;
 
 /** Gebruikte SSO-tickets, ook in bridge_settings. Een ticket leeft 2 minuten. */
 const ONCE_PREFIX = "sso_jti:";
@@ -381,7 +382,7 @@ class PgStore implements Store {
     await this.db
       .delete(settings)
       .where(and(like(settings.key, `${CURSOR_PREFIX}%`), lt(settings.updatedAt, cutoff)));
-    // E-mailcodes en verificaties leven hooguit een uur; een dag is ruim.
+    // E-mailcodes en verificaties leven hooguit een uur, pogingentellers een dag.
     const dag = new Date(Date.now() - 24 * 60 * 60 * 1000);
     for (const prefix of VERIFY_PREFIXES) {
       await this.db.delete(settings).where(and(like(settings.key, `${prefix}%`), lt(settings.updatedAt, dag)));

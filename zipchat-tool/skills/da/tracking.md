@@ -7,21 +7,21 @@ leveret", "hvad er status på min ordre", "min ordre er ikke kommet endnu",
 "sporingsnummer".
 
 Dette er RESERVERUTEN. Brug ved et spørgsmål om en ordre først skill'en
-"Find ordre med e-mailkode": til den har kunden kun brug for sin
-e-mailadresse. Brug først dette værktøj, hvis kunden ikke modtager koden eller
-ikke vil bruge den, eller hvis der ikke er nogen ordrer på kundens
-e-mailadresse.
+"Find ordre med e-mailkode": til den behøver kunden kun sin
+e-mailadresse. Brug dette værktøj, hvis kunden ikke kender sin e-mailadresse
+eller ikke vil oplyse den, ikke modtager koden eller ikke vil bruge den, hvis der
+ikke er ordrer på e-mailadressen, eller hvis kunden allerede har oplyst
+ordrenummer, postnummer og husnummer.
 
-Dette værktøj returnerer personlige ordreoplysninger. Kald det derfor først,
-når du har alle fire oplysninger: tilsammen udgør de verifikationen.
+Dette værktøj returnerer personlige ordreoplysninger. Kald det først, når du har
+alle tre oplysninger: tilsammen udgør de verifikationen. Her er der ikke brug for
+en e-mailadresse: spørg aldrig om den på denne rute, og send ingen e-mailkode.
 </task>
 
 <inputs_resolution>
-Bed kunden om disse fire oplysninger. Spørg om dem i én besked, som en kort
-liste, og vent, til du har dem alle.
+Bed kunden i én besked om de oplysninger, du endnu ikke har, som en kort liste:
 
 {ORDERNUMBER} — ordrenummeret, står i ordrebekræftelsen.
-{EMAIL}       — den e-mailadresse, der blev bestilt med.
 {ZIP}         — postnummeret på leveringsadressen. {{ZIP_HINT}}
 {HOUSENUMBER} — husnummeret på leveringsadressen.
 
@@ -29,16 +29,23 @@ Find aldrig selv på en værdi, og gæt ikke. Mangler der én, så spørg kun ef
 den ene manglende oplysning.
 
 {ORDER_ID} — kommer fra trin 1, ikke fra kunden.
+
+{CONVERSATION_ID} — id'et på denne samtale, præcis som det står i din
+systemkontekst. Er du ikke sikker, så brug "ukendt". Lad det aldrig stå tomt:
+uden denne værdi kommer der intet svar.
 </inputs_resolution>
 
 <execution_protocol>
 Trin 1 — find og verificér ordren:
 
-curl -sS "https://www.exittoys.com/halo.json?email={EMAIL}&zip={ZIP}&housenumber={HOUSENUMBER}&ordernumber={ORDERNUMBER}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
+curl -sS "https://www.exittoys.com/halo.json?email=&zip={ZIP}&housenumber={HOUSENUMBER}&ordernumber={ORDERNUMBER}&conversationid={CONVERSATION_ID}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
 
-Dette API returnerer ALTID HTTP 200. En tom body betyder: ingen ordre, der
-passer til denne kombination. Det er ikke en fejl og ingen grund til at prøve
-igen.
+Denne API giver ALTID HTTP 200. Ordren står i "orders", nummeret i "number". Et
+svar uden ordre (tom body, {} eller en tom liste "orders") betyder: ingen ordre
+på denne kombination, og tæller nedenfor som en tom body. Det er ikke en fejl og
+ikke en grund til at prøve igen. Skriv et mellemrum i en værdi i URL'en som %20.
+Udfør kun trin 2 med et nummer, der er kommet tilbage her, aldrig med et nummer,
+som kun kunden har nævnt.
 
 Får du en ordre tilbage, så brug ordrenummeret fra det svar som {ORDER_ID} i
 trin 2.

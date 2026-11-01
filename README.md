@@ -497,9 +497,25 @@ curl -s "https://app.zipchat.ai/api/integrations/backend_api/v1/chats/<chat_id>/
 Sinds 29 oktober 2026, zoals HALO het deed: bij een vraag over een bestelling
 (tracking, retour, klacht) vraagt de bot alleen het e-mailadres. De bridge
 mailt een code van 6 cijfers; typt de klant die goed over, dan krijgt de bot
-de bestellingen op dat adres en kiest de klant om welke het gaat. De oude
-route met bestelnummer, e-mail, postcode en huisnummer blijft als terugval
-(de klant krijgt geen code, of er staan geen bestellingen op het adres).
+de bestellingen op dat adres en kiest de klant om welke het gaat.
+
+**Terugval zonder e-mailadres** (sinds 1 november 2026): bestelnummer, postcode
+en huisnummer zijn samen genoeg voor tracking of de serviceportaallink. De bot
+gebruikt deze route als de klant zijn e-mailadres niet weet of niet wil geven,
+geen code krijgt, er geen bestellingen op het adres staan, of de klant de drie
+gegevens al gaf. `halo.json` is daarbij kieskeurig:
+
+* `conversationid` moet gevuld zijn; zonder (of leeg) komt er een lege body.
+  Elke niet-lege waarde werkt. De skills sturen het gesprek-id mee.
+* `email=` moet in de URL staan, leeg mag; ontbreekt de sleutel, dan komt `{}`
+  terug. De waarde telt niet mee: postcode, huisnummer en bestelnummer moeten
+  kloppen, een fout e-mailadres maakt niet uit.
+* Niets gevonden is een lege body, `{}` of `{"orders":[]}`.
+* `orderid=…&agent=retour|klacht` geeft de portaallink op alleen het nummer. De
+  controle zit dus in stap 1 van de skill; de bot mag stap 2 alleen uitvoeren
+  met een nummer dat stap 1 teruggaf.
+
+FR (`20749`) staat buiten de sync en heeft deze wijziging niet.
 
 ```
 klant: "waar is mijn pakket?"  →  bot vraagt e-mailadres

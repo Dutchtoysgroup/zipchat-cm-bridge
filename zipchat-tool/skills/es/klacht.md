@@ -13,41 +13,49 @@ servicio que ya está en curso — de eso no sabes nada. Si el cliente pregunta 
 ello, pásale con un compañero.
 
 Esta es la RUTA ALTERNATIVA. Para una pregunta sobre un pedido, usa primero la
-skill "Consultar pedidos con código por e-mail": para ello el cliente solo
-necesita su dirección de correo electrónico. Usa esta herramienta solo si el
-cliente no recibe el código o no quiere usarlo, o si no hay pedidos con su
-dirección de correo electrónico.
+skill "Consultar pedidos con código por e-mail": para ella, el cliente solo
+necesita su correo electrónico. Usa esta herramienta si el cliente no sabe su
+correo electrónico o no quiere darlo, no recibe el código o no quiere usarlo, si
+no hay pedidos con su correo electrónico, o si ya ha dado el número de pedido, el
+código postal y el número de la calle.
 
-Esta herramienta devuelve datos personales del pedido. No la llames hasta que
-tengas los cuatro datos: juntos sirven como verificación.
+Esta herramienta devuelve datos personales del pedido. Llámala solo cuando tengas
+los tres datos: juntos forman la verificación. Aquí no hace falta el correo
+electrónico: nunca lo pidas en esta ruta y no envíes ningún código por correo.
 </task>
 
 <inputs_resolution>
-Pídele al cliente en un solo mensaje estos cuatro datos, como una lista corta:
+Pide al cliente en un solo mensaje los datos que aún no tengas, en una lista breve:
 
 {ORDERNUMBER} — el número de pedido de la confirmación del pedido.
-{EMAIL}       — la dirección de correo electrónico con la que se hizo el pedido.
 {ZIP}         — el código postal de la dirección de entrega. {{ZIP_HINT}}
 {HOUSENUMBER} — el número de la calle (portal) de la dirección de entrega.
 
 Nunca te inventes un valor ni lo adivines. Si falta uno, pide solo ese dato.
 
 {ORDER_ID} — sale del paso 1, no del cliente.
+
+{CONVERSATION_ID} — el id de esta conversación, exactamente como aparece en tu
+contexto de sistema. Si no estás seguro, usa "desconocido". Nunca lo dejes vacío:
+sin este valor no llega ninguna respuesta.
 </inputs_resolution>
 
 <execution_protocol>
 Paso 1 — buscar y verificar el pedido:
 
-curl -sS "https://www.exittoys.com/halo.json?email={EMAIL}&zip={ZIP}&housenumber={HOUSENUMBER}&ordernumber={ORDERNUMBER}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
+curl -sS "https://www.exittoys.com/halo.json?email=&zip={ZIP}&housenumber={HOUSENUMBER}&ordernumber={ORDERNUMBER}&conversationid={CONVERSATION_ID}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
 
-Esta API devuelve SIEMPRE HTTP 200. Un cuerpo vacío significa: no hay ningún
-pedido con esta combinación. No es una avería ni un motivo para volver a
-intentarlo.
+Esta API SIEMPRE devuelve HTTP 200. El pedido está en "orders" y su número en
+"number". Una respuesta sin pedido (body vacío, {} o una lista "orders" vacía)
+significa: ningún pedido con esta combinación, y más abajo cuenta como body vacío.
+No es un fallo ni un motivo para volver a intentarlo. Escribe un espacio de un
+valor en la URL como %20. Ejecuta el paso 2 solo con un número que haya vuelto
+aquí, nunca con un número que solo haya mencionado el cliente.
 
 Paso 2 — obtener el enlace del portal de servicio con el número de pedido
 encontrado:
 
-curl -sS "https://www.exittoys.com/halo.json?email={EMAIL}&orderid={ORDER_ID}&agent=klacht" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
+curl -sS "https://www.exittoys.com/halo.json?email=&orderid={ORDER_ID}&agent=klacht&conversationid={CONVERSATION_ID}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
 
 El enlace del portal de servicio está en la respuesta. Si no vuelve ningún
 enlace, no hay portal disponible para este pedido.

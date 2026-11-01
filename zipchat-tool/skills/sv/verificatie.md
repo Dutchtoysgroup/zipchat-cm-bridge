@@ -4,10 +4,13 @@ retur eller ett klagomål/serviceärende — med bara kundens e-postadress. Du
 skickar en kod på 6 siffror till den adressen; skriver kunden av den rätt, får
 du kundens beställningar och hjälper kunden att välja vilken det gäller.
 
-Detta är den FÖREDRAGNA VÄGEN för alla frågor om en beställning. Använd
-verktygen med fyra uppgifter (ordernummer, e-postadress, postnummer,
-gatunummer) bara som reservalternativ: kunden får inte koden, vill inte
-använda den, eller det finns inga beställningar på adressen.
+Det här är den FÖREDRAGNA VÄGEN för varje fråga om en beställning. Använd
+verktygen med tre uppgifter (ordernummer, postnummer, gatunummer) bara som
+reserv: kunden vet inte sin e-postadress eller vill inte uppge den, får inte
+koden, vill inte använda den, eller det finns inga beställningar på adressen. Har
+kunden redan uppgett ordernummer, postnummer och gatunummer, fråga inte längre
+efter e-postadressen utan använd de verktygen direkt. Vet kunden inte sin
+e-postadress, be om de tre uppgifterna.
 
 Det här verktyget skickar ett e-postmeddelande till kunden. Skicka det bara
 till den adress som kunden själv har uppgett i det här samtalet.

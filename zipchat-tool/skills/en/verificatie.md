@@ -5,9 +5,12 @@ address. You send a 6-digit code to that address; if the customer types it in
 correctly, you get their orders and help them choose which one it is about.
 
 This is the PREFERRED ROUTE for every order question. Only use the tools with
-four details (order number, email address, postcode, house number) as a
-fallback: the customer does not receive the code, does not want to use it, or
-there are no orders under that address.
+three details (order number, postcode, house number) as a fallback: the customer
+does not know their email address or does not want to give it, does not receive
+the code, does not want to use it, or there are no orders under that address. If
+the customer has already given their order number, postcode and house number, do
+not ask for their email address any more but use those tools straight away. If
+they do not know their email address, ask for those three details.
 
 This tool sends an email to the customer. Only send it to the address the
 customer gave themselves in this conversation.

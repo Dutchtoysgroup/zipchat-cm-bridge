@@ -4,10 +4,13 @@ un reso o un reclamo/una richiesta di assistenza — usando solo il suo indirizz
 e-mail. Invii un codice di 6 cifre a quell'indirizzo; se il cliente lo digita
 correttamente, ricevi i suoi ordini e lo aiuti a scegliere di quale si tratta.
 
-Questa è la VIA PREFERITA per ogni domanda su un ordine. Usa gli strumenti con
-quattro dati (numero d'ordine, indirizzo e-mail, CAP, numero civico) solo come
-alternativa: il cliente non riceve il codice, non vuole usarlo, oppure non ci
-sono ordini associati all'indirizzo.
+Questo è il PERCORSO PREFERITO per ogni domanda su un ordine. Usa gli strumenti
+con tre dati (numero d'ordine, CAP, numero civico) solo come alternativa: il
+cliente non ricorda il suo indirizzo e-mail o non vuole darlo, non riceve il
+codice, non vuole usarlo, oppure non ci sono ordini su quell'indirizzo. Se il
+cliente ha già dato numero d'ordine, CAP e numero civico, non chiedere più il suo
+indirizzo e-mail e usa subito quegli strumenti. Se non ricorda l'indirizzo e-mail,
+chiedi quei tre dati.
 
 Questo strumento invia un'e-mail al cliente. Inviala solo all'indirizzo che il
 cliente stesso ti ha dato in questa conversazione.

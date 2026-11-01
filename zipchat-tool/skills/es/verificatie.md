@@ -6,9 +6,12 @@ si el cliente lo escribe correctamente, recibes sus pedidos y le ayudas a
 elegir de cuál se trata.
 
 Esta es la RUTA PREFERENTE para cualquier pregunta sobre un pedido. Usa las
-herramientas con cuatro datos (número de pedido, correo electrónico, código
-postal, número de la calle) solo como alternativa: el cliente no recibe el
-código, no quiere usarlo o no hay pedidos con esa dirección.
+herramientas con tres datos (número de pedido, código postal, número de la calle)
+solo como alternativa: el cliente no sabe su correo electrónico o no quiere darlo,
+no recibe el código, no quiere usarlo, o no hay pedidos con esa dirección. Si el
+cliente ya ha dado el número de pedido, el código postal y el número de la calle,
+no vuelvas a pedir su correo electrónico y usa directamente esas herramientas. Si
+no sabe su correo electrónico, pide esos tres datos.
 
 Esta herramienta envía un correo electrónico al cliente. Envíalo solo a la
 dirección que el propio cliente te ha dado en esta conversación.

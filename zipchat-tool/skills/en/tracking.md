@@ -7,19 +7,20 @@ arrived yet", "tracking number", "has my order been dispatched yet".
 
 This is the FALLBACK ROUTE. For an order question, first use the skill
 "Look up orders with an email code": for that, the customer only needs their
-email address. Only use this tool if the customer does not receive the code or
-does not want to use it, or if there are no orders under their email address.
+email address. Use this tool if the customer does not know their email address
+or does not want to give it, does not receive the code or does not want to use
+it, if there are no orders under their email address, or if they have already
+given their order number, postcode and house number.
 
-This tool returns personal order details. So only call it once you have all
-four details: together they form the verification.
+This tool returns personal order details. Only call it once you have all three
+details: together they form the verification. No email address is needed here:
+never ask for one on this route and do not send an email code.
 </task>
 
 <inputs_resolution>
-Ask the customer for these four details. Ask for them in one message, as a
-short list, and wait until you have all of them.
+Ask the customer in one message for the details you don't have yet, as a short list:
 
 {ORDERNUMBER} — the order number, shown in the order confirmation.
-{EMAIL}       — the email address used to place the order.
 {ZIP}         — the postcode of the delivery address. {{ZIP_HINT}}
 {HOUSENUMBER} — the house number of the delivery address. If the address has
                 no house number, ask for the house name or the first line of
@@ -29,15 +30,23 @@ Never make up a value yourself and do not guess. If one is missing, ask only for
 that one missing detail.
 
 {ORDER_ID} — comes from step 1, not from the customer.
+
+{CONVERSATION_ID} — the id of this conversation, exactly as it appears in your
+system context. If you are not sure, use "unknown". Never leave it empty:
+without this value no answer comes back.
 </inputs_resolution>
 
 <execution_protocol>
 Step 1 — find and verify the order:
 
-curl -sS "https://www.exittoys.com/halo.json?email={EMAIL}&zip={ZIP}&housenumber={HOUSENUMBER}&ordernumber={ORDERNUMBER}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
+curl -sS "https://www.exittoys.com/halo.json?email=&zip={ZIP}&housenumber={HOUSENUMBER}&ordernumber={ORDERNUMBER}&conversationid={CONVERSATION_ID}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
 
-This API ALWAYS returns HTTP 200. An empty body means: no order matches this
-combination. That is not a fault and not a reason to try again.
+This API ALWAYS returns HTTP 200. The order is in "orders", its number in
+"number". A response without an order (empty body, {} or an empty "orders" list)
+means: no order matches this combination, and counts as an empty body below.
+That is not a fault and not a reason to try again. Write a space in a value in
+the URL as %20. Only run step 2 with a number that came back here, never with a
+number only the customer mentioned.
 
 If you get an order back, use the order number from that response as
 {ORDER_ID} for step 2.

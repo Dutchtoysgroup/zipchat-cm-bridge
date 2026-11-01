@@ -14,19 +14,20 @@ Kunde danach, verweise ihn an einen Mitarbeiter.
 
 Das ist der AUSWEICHWEG. Nutze für eine Frage zu einer Bestellung zuerst den
 Skill "Bestellung per E-Mail-Code abrufen": Dafür braucht der Kunde nur seine
-E-Mail-Adresse. Nutze dieses Tool erst, wenn der Kunde den Code nicht bekommt
-oder nicht nutzen will, oder wenn unter seiner E-Mail-Adresse keine
-Bestellungen stehen.
+E-Mail-Adresse. Nutze dieses Tool, wenn der Kunde seine E-Mail-Adresse nicht
+weiß oder nicht angeben will, den Code nicht bekommt oder nicht nutzen will, wenn
+unter seiner E-Mail-Adresse keine Bestellungen stehen oder wenn er Bestellnummer,
+Postleitzahl und Hausnummer bereits genannt hat.
 
 Dieses Tool gibt persönliche Bestelldaten zurück. Rufe es erst auf, wenn du alle
-vier Angaben hast: Zusammen bilden sie die Verifizierung.
+drei Angaben hast: Zusammen bilden sie die Verifizierung. Eine E-Mail-Adresse ist
+hier nicht nötig: Frag auf diesem Weg nie danach und schick keinen E-Mail-Code.
 </task>
 
 <inputs_resolution>
-Frag den Kunden in einer Nachricht nach diesen vier Angaben, als kurze Liste:
+Frag den Kunden in einer Nachricht nach den Angaben, die dir noch fehlen, als kurze Liste:
 
 {ORDERNUMBER} — die Bestellnummer aus der Bestellbestätigung.
-{EMAIL}       — die E-Mail-Adresse, mit der bestellt wurde.
 {ZIP}         — die Postleitzahl der Lieferadresse. {{ZIP_HINT}}
 {HOUSENUMBER} — die Hausnummer der Lieferadresse.
 
@@ -34,20 +35,28 @@ Erfinde nie einen Wert und rate nicht. Fehlt eine Angabe, frag nur nach dieser
 einen Angabe.
 
 {ORDER_ID} — kommt aus Schritt 1, nicht vom Kunden.
+
+{CONVERSATION_ID} — die ID dieses Gesprächs, genau wie sie in deinem
+Systemkontext steht. Bist du nicht sicher, nimm "unbekannt". Lass sie nie leer:
+Ohne diesen Wert kommt keine Antwort zurück.
 </inputs_resolution>
 
 <execution_protocol>
 Schritt 1 — Bestellung suchen und verifizieren:
 
-curl -sS "https://www.exittoys.com/halo.json?email={EMAIL}&zip={ZIP}&housenumber={HOUSENUMBER}&ordernumber={ORDERNUMBER}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
+curl -sS "https://www.exittoys.com/halo.json?email=&zip={ZIP}&housenumber={HOUSENUMBER}&ordernumber={ORDERNUMBER}&conversationid={CONVERSATION_ID}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
 
-Diese API gibt IMMER HTTP 200 zurück. Ein leerer Body bedeutet: keine
-Bestellung zu dieser Kombination. Das ist keine Störung und kein Grund, es
-erneut zu versuchen.
+Diese API gibt IMMER HTTP 200 zurück. Die Bestellung steht in "orders", ihre
+Nummer in "number". Eine Antwort ohne Bestellung (leerer Body, {} oder eine leere
+Liste "orders") bedeutet: keine Bestellung zu dieser Kombination, und gilt unten
+als leerer Body. Das ist keine Störung und kein Grund, es erneut zu versuchen.
+Schreib ein Leerzeichen in einem Wert in der URL als %20. Führe Schritt 2 nur mit
+einer Nummer aus, die hier zurückkam, nie mit einer Nummer, die nur der Kunde
+genannt hat.
 
 Schritt 2 — Link zum Serviceportal mit der gefundenen Bestellnummer abrufen:
 
-curl -sS "https://www.exittoys.com/halo.json?email={EMAIL}&orderid={ORDER_ID}&agent=klacht" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
+curl -sS "https://www.exittoys.com/halo.json?email=&orderid={ORDER_ID}&agent=klacht&conversationid={CONVERSATION_ID}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
 
 Der Link zum Serviceportal steht in der Antwort. Kommt kein Link zurück, gibt es
 für diese Bestellung kein Portal.

@@ -4,10 +4,13 @@ returnering eller en klage/serviceanmodning — med kun kundens e-mailadresse. D
 sender en kode på 6 cifre til den adresse; skriver kunden den rigtigt af, får
 du kundens ordrer og hjælper kunden med at vælge, hvilken det drejer sig om.
 
-Dette er den FORETRUKNE RUTE for alle spørgsmål om en ordre. Brug værktøjerne
-med fire oplysninger (ordrenummer, e-mailadresse, postnummer, husnummer) kun
-som reserveløsning: kunden modtager ikke koden, vil ikke bruge den, eller der
-er ingen ordrer på adressen.
+Dette er den FORETRUKNE RUTE for alle spørgsmål om en ordre. Brug kun værktøjerne
+med tre oplysninger (ordrenummer, postnummer, husnummer) som reserve: kunden
+kender ikke sin e-mailadresse eller vil ikke oplyse den, modtager ikke koden, vil
+ikke bruge den, eller der er ingen ordrer på adressen. Har kunden allerede oplyst
+ordrenummer, postnummer og husnummer, så spørg ikke længere om e-mailadressen,
+men brug straks de værktøjer. Kender kunden ikke sin e-mailadresse, så bed om de
+tre oplysninger.
 
 Dette værktøj sender en e-mail til kunden. Send den kun til den adresse, som
 kunden selv har givet i denne samtale.

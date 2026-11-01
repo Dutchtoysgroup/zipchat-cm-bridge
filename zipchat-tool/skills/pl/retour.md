@@ -9,21 +9,22 @@ zwrotna", "odstąpienie od umowy".
 NIE zajmujesz się statusem ani obsługą zwrotu, który już trwa — nic o nim nie
 wiesz. Jeśli klient o to pyta, przekaż go do konsultanta.
 
-To jest ŚCIEŻKA ZAPASOWA. Przy pytaniu o zamówienie najpierw skorzystaj ze
-skilla "Sprawdź zamówienia kodem z e-maila": klient potrzebuje do tego tylko
-swojego adresu e-mail. Użyj tego narzędzia dopiero wtedy, gdy klient nie
-otrzymuje kodu lub nie chce go użyć albo gdy na jego adresie e-mail nie ma
-żadnych zamówień.
+To jest TRASA ZAPASOWA. Przy pytaniu o zamówienie najpierw użyj skilla
+"Sprawdź zamówienia kodem z e-maila": klient potrzebuje do niego tylko swojego
+adresu e-mail. Użyj tego narzędzia, jeśli klient nie pamięta adresu e-mail lub nie
+chce go podać, nie otrzymuje kodu lub nie chce go użyć, jeśli na ten adres e-mail
+nie ma zamówień albo jeśli klient podał już numer zamówienia, kod pocztowy i numer
+domu.
 
-To narzędzie zwraca osobiste dane zamówienia. Wywołaj je dopiero wtedy, gdy masz
-wszystkie cztery dane: razem stanowią one weryfikację.
+To narzędzie zwraca dane osobowe zamówienia. Wywołaj je dopiero, gdy masz wszystkie
+trzy dane: razem stanowią weryfikację. Adres e-mail nie jest tu potrzebny: nigdy o
+niego nie pytaj na tej trasie i nie wysyłaj kodu e-mailem.
 </task>
 
 <inputs_resolution>
-Poproś klienta w jednej wiadomości o te cztery dane, w formie krótkiej listy:
+Poproś klienta w jednej wiadomości o dane, których jeszcze nie masz, w formie krótkiej listy:
 
 {ORDERNUMBER} — numer zamówienia z potwierdzenia zamówienia.
-{EMAIL}       — adres e-mail, na który złożono zamówienie.
 {ZIP}         — kod pocztowy adresu dostawy. {{ZIP_HINT}}
 {HOUSENUMBER} — numer domu adresu dostawy.
 
@@ -31,20 +32,28 @@ Nigdy nie wymyślaj żadnej wartości i nie zgaduj. Jeśli jednej brakuje, zapyt
 tylko o tę jedną informację.
 
 {ORDER_ID} — pochodzi z kroku 1, nie od klienta.
+
+{CONVERSATION_ID} — id tej rozmowy, dokładnie tak, jak podano je w kontekście
+systemowym. Jeśli nie masz pewności, użyj "nieznane". Nigdy nie zostawiaj go
+pustego: bez tej wartości nie przyjdzie żadna odpowiedź.
 </inputs_resolution>
 
 <execution_protocol>
 Krok 1 — wyszukanie i weryfikacja zamówienia:
 
-curl -sS "https://www.exittoys.com/halo.json?email={EMAIL}&zip={ZIP}&housenumber={HOUSENUMBER}&ordernumber={ORDERNUMBER}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
+curl -sS "https://www.exittoys.com/halo.json?email=&zip={ZIP}&housenumber={HOUSENUMBER}&ordernumber={ORDERNUMBER}&conversationid={CONVERSATION_ID}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
 
-To API ZAWSZE zwraca HTTP 200. Pusta treść odpowiedzi oznacza: brak zamówienia
-dla tej kombinacji danych. To nie jest awaria ani powód, żeby próbować ponownie.
+To API ZAWSZE zwraca HTTP 200. Zamówienie jest w "orders", jego numer w "number".
+Odpowiedź bez zamówienia (pusty body, {} lub pusta lista "orders") oznacza: brak
+zamówienia dla tej kombinacji i poniżej liczy się jako pusty body. To nie jest
+awaria ani powód, by próbować ponownie. Spację w wartości zapisz w URL jako %20.
+Wykonaj krok 2 tylko z numerem, który wrócił tutaj, nigdy z numerem, który podał
+tylko klient.
 
 Krok 2 — pobranie linku do portalu serwisowego na podstawie znalezionego numeru
 zamówienia:
 
-curl -sS "https://www.exittoys.com/halo.json?email={EMAIL}&orderid={ORDER_ID}&agent=retour" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
+curl -sS "https://www.exittoys.com/halo.json?email=&orderid={ORDER_ID}&agent=retour&conversationid={CONVERSATION_ID}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
 
 Link do portalu serwisowego jest w odpowiedzi. Jeśli link nie zostanie
 zwrócony, portal nie jest dostępny dla tego zamówienia.

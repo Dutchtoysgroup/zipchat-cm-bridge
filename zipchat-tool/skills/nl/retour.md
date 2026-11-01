@@ -10,18 +10,20 @@ weet je niets. Vraagt de klant daarnaar, verwijs dan door naar een medewerker.
 
 Dit is de TERUGVALROUTE. Gebruik voor een bestelvraag eerst de skill
 "Bestelling opzoeken met e-mailcode": daarvoor heeft de klant alleen zijn
-e-mailadres nodig. Gebruik deze tool pas als de klant de code niet ontvangt of
-niet wil gebruiken, of als er op zijn e-mailadres geen bestellingen staan.
+e-mailadres nodig. Gebruik deze tool als de klant zijn e-mailadres niet weet of
+niet wil geven, de code niet ontvangt of niet wil gebruiken, als er op zijn
+e-mailadres geen bestellingen staan, of als hij zelf al bestelnummer, postcode
+en huisnummer heeft gegeven.
 
 Deze tool geeft persoonlijke bestelgegevens terug. Roep hem pas aan als je alle
-vier de gegevens hebt: die vormen samen de verificatie.
+drie de gegevens hebt: die vormen samen de verificatie. Een e-mailadres is hier
+niet nodig: vraag er in deze route nooit om en stuur geen e-mailcode.
 </task>
 
 <inputs_resolution>
-Vraag de klant in één bericht om deze vier gegevens, als korte lijst:
+Vraag de klant in één bericht om de gegevens die je nog niet hebt, als korte lijst:
 
 {ORDERNUMBER} — het bestelnummer uit de orderbevestiging.
-{EMAIL}       — het e-mailadres waarmee besteld is.
 {ZIP}         — de postcode van het bezorgadres. {{ZIP_HINT}}
 {HOUSENUMBER} — het huisnummer van het bezorgadres.
 
@@ -29,19 +31,27 @@ Verzin nooit een waarde en gok niet. Ontbreekt er één, vraag dan alleen naar d
 ene gegeven.
 
 {ORDER_ID} — komt uit stap 1, niet van de klant.
+
+{CONVERSATION_ID} — het id van dit gesprek, exact zoals het in je systeemcontext
+staat. Weet je het niet zeker, gebruik dan "onbekend". Laat het nooit leeg:
+zonder deze waarde komt er geen antwoord.
 </inputs_resolution>
 
 <execution_protocol>
 Stap 1 — bestelling zoeken en verifiëren:
 
-curl -sS "https://www.exittoys.com/halo.json?email={EMAIL}&zip={ZIP}&housenumber={HOUSENUMBER}&ordernumber={ORDERNUMBER}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
+curl -sS "https://www.exittoys.com/halo.json?email=&zip={ZIP}&housenumber={HOUSENUMBER}&ordernumber={ORDERNUMBER}&conversationid={CONVERSATION_ID}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
 
-Deze API geeft ALTIJD HTTP 200. Een lege body betekent: geen bestelling bij deze
-combinatie. Dat is geen storing en geen reden om opnieuw te proberen.
+Deze API geeft ALTIJD HTTP 200. De bestelling staat in "orders", het nummer in
+"number". Een antwoord zonder bestelling (lege body, {} of een lege lijst
+"orders") betekent: geen bestelling bij deze combinatie, en telt hieronder als
+lege body. Dat is geen storing en geen reden om opnieuw te proberen. Schrijf een
+spatie in een waarde in de URL als %20. Voer stap 2 alleen uit met een nummer dat
+hier is teruggekomen, nooit met een nummer dat alleen de klant noemde.
 
 Stap 2 — serviceportaallink ophalen met het gevonden ordernummer:
 
-curl -sS "https://www.exittoys.com/halo.json?email={EMAIL}&orderid={ORDER_ID}&agent=retour" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
+curl -sS "https://www.exittoys.com/halo.json?email=&orderid={ORDER_ID}&agent=retour&conversationid={CONVERSATION_ID}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
 
 De serviceportaallink staat in het antwoord. Komt er geen link terug, dan is er
 voor deze bestelling geen portaal beschikbaar.

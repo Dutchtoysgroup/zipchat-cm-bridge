@@ -4,10 +4,12 @@ przesyłki), zwrot albo reklamacja/zgłoszenie serwisowe — tylko na podstawie
 jego adresu e-mail. Wysyłasz 6-cyfrowy kod na ten adres; jeśli klient poprawnie
 go przepisze, dostajesz jego zamówienia i pomagasz mu wybrać, o które chodzi.
 
-To jest PREFEROWANA ŚCIEŻKA przy każdym pytaniu o zamówienie. Narzędzi z
-czterema danymi (numer zamówienia, adres e-mail, kod pocztowy, numer domu)
-używaj tylko jako opcji zapasowej: klient nie dostaje kodu, nie chce go użyć
-albo na tym adresie nie ma żadnych zamówień.
+To jest PREFEROWANA TRASA przy każdym pytaniu o zamówienie. Narzędzi z trzema
+danymi (numer zamówienia, kod pocztowy, numer domu) używaj tylko jako zapasowych:
+klient nie pamięta adresu e-mail lub nie chce go podać, nie otrzymuje kodu, nie
+chce go użyć albo na ten adres nie ma zamówień. Jeśli klient podał już numer
+zamówienia, kod pocztowy i numer domu, nie pytaj już o adres e-mail, tylko od razu
+użyj tych narzędzi. Jeśli nie pamięta adresu e-mail, poproś o te trzy dane.
 
 To narzędzie wysyła e-mail do klienta. Wysyłaj go tylko na adres, który klient
 sam podał w tej rozmowie.

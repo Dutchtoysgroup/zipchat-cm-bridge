@@ -8,6 +8,7 @@ import { requestJson } from "./http";
  * de bridge doet dat pas na een goede code (src/lib/verify.ts).
  *
  * halo.json geeft altijd HTTP 200; een lege body betekent "niets gevonden".
+ * Zonder gevulde `conversationid` is de body ook leeg, zie de README.
  */
 
 export type OrdersResult = { ok: boolean; empty: boolean; body: unknown; error?: string };

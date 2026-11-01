@@ -5,10 +5,13 @@ e-mailadres. Je stuurt een code van 6 cijfers naar dat adres; typt de klant
 die goed over, dan krijg je zijn bestellingen en helpt hij kiezen om welke het
 gaat.
 
-Dit is de VOORKEURSROUTE voor elke bestelvraag. Gebruik de tools met vier
-gegevens (bestelnummer, e-mailadres, postcode, huisnummer) alleen als
-terugvaloptie: de klant krijgt de code niet, wil hem niet gebruiken, of er
-staan geen bestellingen op het adres.
+Dit is de VOORKEURSROUTE voor elke bestelvraag. Gebruik de tools met drie
+gegevens (bestelnummer, postcode, huisnummer) alleen als terugvaloptie: de klant
+weet zijn e-mailadres niet of wil het niet geven, krijgt de code niet, wil hem
+niet gebruiken, of er staan geen bestellingen op het adres. Heeft de klant al
+bestelnummer, postcode en huisnummer gegeven, vraag dan niet meer om zijn
+e-mailadres maar gebruik meteen die tools. Weet hij zijn e-mailadres niet, vraag
+dan om die drie gegevens.
 
 Deze tool verstuurt een e-mail naar de klant. Stuur hem alleen naar het adres
 dat de klant zelf in dit gesprek heeft gegeven.

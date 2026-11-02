@@ -1,26 +1,33 @@
 # Custom tool: "Klacht of serviceaanvraag melden"
 
-Overgenomen uit HALO (agent 27, tool 18). Zelfde endpoint als de pakket-tool,
-maar met `agent=klacht` — dát bepaalt welke serviceportaallink je terugkrijgt.
+Bot `20749` (FR), tool 625: dezelfde tekst als `skills/nl/klacht.md`, met Franse
+trefwoorden. Overgenomen uit HALO (agent 27, tool 18). De portaallink hangt af van
+`info: "klacht"`.
 
-**Afwijking van HALO:** daar gaat een OTP-code per e-mail vooraf aan het opzoeken.
-Zipchat kent geen OTP, dus verifieert deze tool met ordernummer, e-mail, postcode
-én huisnummer samen — dezelfde bezitscontrole als de pakket-tool.
+**Afwijking van HALO:** de bridge doet de controle op bestelnummer, postcode en
+huisnummer, met hoogstens 5 pogingen per 24 uur (README, Bestellingen met een
+e-mailcode). Deze tool roept `POST /api/zipchat/order` aan, niet zelf `halo.json`.
 
-## Variabele
-`EXIT_ORDER_API_AUTH` (bestaat al, gedeeld met de pakket-tool)
+## Variabelen
+`EXIT_BRIDGE_URL` en `MSC_BRIDGE_SECRET`, dezelfde als de skill "Bestelling opzoeken
+met e-mailcode". De order-API-sleutels staan alleen op de bridge.
 
 ## Prompt (instructions)
 
 ```
 <task>
-Klacht of serviceaanvraag melden: zoek de bestelling van de klant op en geef de serviceportaallink,
-waarmee de klant zelf een klacht of serviceaanvraag kan indienen bij EXIT Toys.
+Klacht of serviceaanvraag melden: zoek de bestelling van de klant op en geef de
+serviceportaallink, waarmee de klant zelf een klacht of serviceaanvraag kan
+indienen bij EXIT Toys.
 
-Gebruik deze tool bij: "klacht", "ontevreden", "kapot", "beschadigd", "werkt niet", "probleem met product", "slechte kwaliteit", "niet compleet", "serviceaanvraag", "produit cassé", "endommagé", "réclamation", "ne fonctionne pas"
+Gebruik deze tool bij: "klacht", "ontevreden", "kapot", "beschadigd", "werkt
+niet", "probleem met product", "slechte kwaliteit", "niet compleet", "onderdeel
+ontbreekt", "serviceaanvraag", "garantie", "produit cassé", "endommagé",
+"réclamation", "ne fonctionne pas".
 
-Je gaat NIET over de status of afhandeling van een al lopende een klacht of serviceaanvraag — daarover
-weet je niets. Vraagt de klant daarnaar, verwijs dan door naar een medewerker.
+Je gaat NIET over de status of afhandeling van een al lopende klacht of
+serviceaanvraag — daarover weet je niets. Vraagt de klant daarnaar, verwijs dan
+door naar een medewerker.
 
 Dit is de TERUGVALROUTE. Gebruik voor een bestelvraag eerst de skill
 "Bestelling opzoeken met e-mailcode": daarvoor heeft de klant alleen zijn
@@ -38,62 +45,57 @@ niet nodig: vraag er in deze route nooit om en stuur geen e-mailcode.
 Vraag de klant in één bericht om de gegevens die je nog niet hebt, als korte lijst:
 
 {ORDERNUMBER} — het bestelnummer uit de orderbevestiging.
-{ZIP}         — de postcode van het bezorgadres.
+{ZIP}         — de postcode van het bezorgadres. Frankrijk 5 cijfers, Nederland 4 cijfers + 2 letters, België 4 cijfers, Duitsland 5 cijfers.
 {HOUSENUMBER} — het huisnummer van het bezorgadres.
 
 Verzin nooit een waarde en gok niet. Ontbreekt er één, vraag dan alleen naar dat
 ene gegeven.
 
-{ORDER_ID} — komt uit stap 1, niet van de klant.
-
 {CONVERSATION_ID} — het id van dit gesprek, exact zoals het in je systeemcontext
-staat. Weet je het niet zeker, gebruik dan "onbekend". Laat het nooit leeg:
-zonder deze waarde komt er geen antwoord.
+staat. Weet je het niet zeker, laat het dan leeg ("").
 </inputs_resolution>
 
 <execution_protocol>
-Stap 1 — bestelling zoeken en verifiëren:
+Bestelling controleren en serviceportaallink ophalen:
 
-curl -sS "https://www.exittoys.com/halo.json?email=&zip={ZIP}&housenumber={HOUSENUMBER}&ordernumber={ORDERNUMBER}&conversationid={CONVERSATION_ID}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
+curl -sS -X POST "$EXIT_BRIDGE_URL/order" -H "Content-Type: application/json" -H "X-Bridge-Secret: $MSC_BRIDGE_SECRET" -d '{"ordernumber":"{ORDERNUMBER}","zip":"{ZIP}","housenumber":"{HOUSENUMBER}","info":"klacht","conversation_id":"{CONVERSATION_ID}"}'
 
-Deze API geeft ALTIJD HTTP 200. De bestelling staat in "orders", het nummer in
-"number". Een antwoord zonder bestelling (lege body, {} of een lege lijst
-"orders") betekent: geen bestelling bij deze combinatie, en telt hieronder als
-lege body. Dat is geen storing en geen reden om opnieuw te proberen. Schrijf een
-spatie in een waarde in de URL als %20. Voer stap 2 alleen uit met een nummer dat
-hier is teruggekomen, nooit met een nummer dat alleen de klant noemde.
+Vul de drie gegevens in precies zoals de klant ze typte. Deze ene aanroep
+controleert ze en haalt pas daarna de serviceportaallink op; er is geen tweede
+stap.
 
-Stap 2 — serviceportaallink ophalen met het gevonden ordernummer:
+Staat "verified" op true, dan staat de bestelling in "order" en de
+serviceportaallink in "result". Staat er geen "result", dan is er voor deze
+bestelling geen portaal beschikbaar.
 
-curl -sS "https://www.exittoys.com/halo.json?email=&orderid={ORDER_ID}&agent=klacht&conversationid={CONVERSATION_ID}" -H "Authorization: $EXIT_ORDER_API_AUTH" -H "Accept: application/json"
-
-De serviceportaallink staat in het antwoord. Komt er geen link terug, dan is er
-voor deze bestelling geen portaal beschikbaar.
+Staat "verified" op false, dan is er niets opgehaald. Volg "message". Probeer
+geen andere combinaties en geen varianten: elke poging telt, en na een paar
+fouten stopt het.
 </execution_protocol>
 
 <klacht_rules>
-Lege body in stap 1: zeg dat je met deze gegevens geen bestelling kunt vinden en
-vraag de klant ze na te kijken — bestelnummer en postcode moeten van dezelfde
-bestelling zijn. Lukt het daarna niet, bied dan aan door te verbinden. Ga niet
-zelf zoeken met andere gegevens.
+Antwoord "verified": false, "reason": "geen bestelling": zeg dat je met deze
+gegevens geen bestelling kunt vinden en vraag de klant ze na te kijken —
+bestelnummer en postcode moeten van dezelfde bestelling zijn. Lukt het daarna
+niet, bied dan aan door te verbinden. Ga niet zelf zoeken met andere gegevens.
 
-Geen link in stap 2: zeg eerlijk dat je geen portaallink kunt ophalen voor deze
-bestelling en bied aan door te verbinden. Verzin geen alternatieve link en
-verwijs niet naar een algemene pagina alsof dat hetzelfde is.
+Geen link: zeg eerlijk dat je geen portaallink kunt ophalen voor deze bestelling
+en bied aan door te verbinden. Verzin geen alternatieve link en verwijs niet
+naar een algemene pagina alsof dat hetzelfde is.
 </klacht_rules>
 
 <tool_persistence_rules>
-Zeg pas iets over een bestelling nadat je de echte respons hebt gezien. Een lege
-body is een geldig antwoord dat "niet gevonden" betekent — behandel dat niet als
-fout en verzin er geen bestelling bij.
+Zeg pas iets over een bestelling nadat je de echte respons hebt gezien.
+"verified": false is een geldig antwoord dat "niet gevonden" betekent — behandel
+dat niet als storing en verzin er geen bestelling bij.
 
-Zeg nooit dat een klacht of serviceaanvraag is aangemeld: deze tool meldt niets aan. De klant doet dat
-zelf via de link.
+Zeg nooit dat een klacht of serviceaanvraag is aangemeld: deze tool meldt niets
+aan. De klant doet dat zelf via de link.
 </tool_persistence_rules>
 
 <output_contract>
-Geef de serviceportaallink en leg in één zin uit dat de klant daar zelf een klacht of serviceaanvraag
-kan indienen.
+Geef de serviceportaallink en leg in één zin uit dat de klant daar zelf een klacht
+of serviceaanvraag kan indienen.
 
 Neem de link teken voor teken over zoals hij in de respons staat. Kort hem niet
 in en vertaal hem nooit — een aangepaste link werkt niet.

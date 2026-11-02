@@ -1,4 +1,5 @@
 import { config, type Channel } from "./config";
+import type { ApiResult } from "./http";
 import { store, type Session } from "@/db";
 import * as zipchat from "./zipchat";
 import * as cm from "./cm";
@@ -207,7 +208,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   // onze: die lopen niet gelijk.
   const lastInTicket = latestMessage(messages);
 
-  const session = await store.createSession({
+  const velden = {
     zipchatChatId: chatId,
     zipchatConversationId: conversationId,
     cmChatId: cmChat.id,
@@ -219,7 +220,21 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     status: "escalating",
     reason: input.reason ?? null,
     lastForwardedAt: lastInTicket.at ?? new Date(),
-  });
+  };
+  // De widget houdt een bezoeker in hetzelfde gesprek, dus een tweede vraag aan
+  // een collega komt op dezelfde sessie uit. Per gesprek mag er maar één rij
+  // zijn. Wat er toen al heen ging, staat achter de oude cursor en gaat niet
+  // nog eens mee; createdAt is het moment van doorzetten, en dat is nu.
+  const alVerstuurd = existing ? await store.getForwardCursor(existing.id) : null;
+  const session = existing
+    ? ((await store.updateSession(existing.id, {
+        ...velden,
+        handoverState: null,
+        agentName: null,
+        lastAgentReplyAt: null,
+        createdAt: new Date(),
+      })) ?? existing)
+    : await store.createSession(velden);
   if (lastInTicket.id !== null) await store.setForwardCursor(session.id, lastInTicket.id);
 
   await store.logEvent({
@@ -300,22 +315,15 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
 
   // 3b. Live chat: de AI op pauze, zodat hij niet door de medewerker heen praat.
   // Zipchat weigert een handmatig bericht zolang de AI het gesprek heeft.
-  if (liveChat) {
-    const assigneeId = Number(config.zipchat.senderId);
-    const pause = await zipchat.setAssignment(conversationId, Number.isFinite(assigneeId) ? assigneeId : 0, chatId);
-    await store.logEvent({
-      sessionId: session.id,
-      direction: "bridge->zipchat",
-      kind: "escalate.pause_ai",
-      ok: pause.ok,
-      statusCode: pause.status,
-      summary: pause.ok ? "AI gepauzeerd: de medewerker neemt het chatvenster over" : `AI pauzeren mislukt: ${pause.error}`,
-    });
-  }
+  if (liveChat) await pauseAi(session.id, conversationId, chatId);
 
   const payload: cm.TwoWayPayload = {
     chat: cmChat,
-    conversationMessages: routerHistory(messages, context, session.createdAt),
+    conversationMessages: routerHistory(
+      messages.filter((m) => alVerstuurd === null || (messageId(m) ?? Infinity) > alVerstuurd),
+      context,
+      session.createdAt,
+    ),
   };
 
   const sent = await cm.sendToRouter(payload);
@@ -466,6 +474,20 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     mocked: sent.mocked,
     message: liveChat ? liveHandoverMessage() : mailHandoverMessage(),
   };
+}
+
+/** De AI op pauze, zodat de medewerker in het chatvenster kan antwoorden. */
+async function pauseAi(sessionId: number, conversationId: string, chatId: string): Promise<void> {
+  const assigneeId = Number(config.zipchat.senderId);
+  const pause = await zipchat.setAssignment(conversationId, Number.isFinite(assigneeId) ? assigneeId : 0, chatId);
+  await store.logEvent({
+    sessionId,
+    direction: "bridge->zipchat",
+    kind: "escalate.pause_ai",
+    ok: pause.ok,
+    statusCode: pause.status,
+    summary: pause.ok ? "AI gepauzeerd: de medewerker neemt het chatvenster over" : `AI pauzeren mislukt: ${pause.error}`,
+  });
 }
 
 /**
@@ -671,6 +693,11 @@ async function deliverToWidget(
   texts: string[],
   sender: string | null,
 ): Promise<{ ok: boolean; delivered: number; message: string }> {
+  // Een sessie die intussen dicht is, staat weer bij de AI, en Zipchat weigert
+  // dan een handmatig bericht. Dit antwoord komt dus eerst de pauze terugzetten.
+  if (session.status === "closed") {
+    await pauseAi(session.id, session.zipchatConversationId, session.zipchatChatId);
+  }
   let delivered = 0;
   for (const text of texts) {
     const res = await zipchat.sendManualReply(session.zipchatConversationId, text, { chatId: session.zipchatChatId });
@@ -743,6 +770,14 @@ export async function countPollable(): Promise<number> {
  */
 const backoff = new Map<number, { failures: number; nextAt: number }>();
 const MAX_BACKOFF_MS = 5 * 60_000;
+
+/** Telt een mislukte poging voor deze sessie. Geeft het aantal en de wachttijd terug. */
+function waitLonger(sessionId: number): { failures: number; delay: number } {
+  const failures = (backoff.get(sessionId)?.failures ?? 0) + 1;
+  const delay = Math.min(config.poll.intervalMs * 2 ** (failures - 1), MAX_BACKOFF_MS);
+  backoff.set(sessionId, { failures, nextAt: Date.now() + delay });
+  return { failures, delay };
+}
 
 /**
  * Zipchat is zelf de wachtrij: wat nog niet bij CM ligt, halen we de volgende
@@ -820,9 +855,7 @@ export async function pollOnce(): Promise<{ checked: number; forwarded: number; 
       } else {
         const reason = giveUpReason(m, res.status);
         if (!reason) {
-          const failures = (backoff.get(session.id)?.failures ?? 0) + 1;
-          const delay = Math.min(config.poll.intervalMs * 2 ** (failures - 1), MAX_BACKOFF_MS);
-          backoff.set(session.id, { failures, nextAt: Date.now() + delay });
+          const { failures, delay } = waitLonger(session.id);
           await store.logEvent({
             sessionId: session.id,
             direction: "bridge->cm",
@@ -853,13 +886,30 @@ export async function pollOnce(): Promise<{ checked: number; forwarded: number; 
     // Stille sessies netjes afsluiten.
     const idleMs = Date.now() - new Date(session.updatedAt).getTime();
     if (pending.length === 0 && idleMs > config.poll.idleTimeoutMin * 60_000) {
+      // Eerst terug naar de AI. Blijft de AI op pauze, dan krijgt de klant in
+      // dit venster nooit meer antwoord en ziet niemand zijn berichten: de
+      // poller kijkt niet meer naar een gesloten sessie. Lukt het niet, dan
+      // blijft de sessie open en probeert de volgende ronde het opnieuw.
+      const back = await handBackToAi(session);
+      if (!back.ok) {
+        const { failures, delay } = waitLonger(session.id);
+        await store.logEvent({
+          sessionId: session.id,
+          direction: "bridge->zipchat",
+          kind: "session.auto_close_failed",
+          ok: false,
+          statusCode: back.status,
+          summary: `Niet terug naar de AI (poging ${failures}, opnieuw over ${Math.ceil(delay / 1000)}s): ${back.error}`,
+        });
+        continue;
+      }
       await store.updateSession(session.id, { status: "closed" });
       closed++;
       await store.logEvent({
         sessionId: session.id,
         direction: "internal",
         kind: "session.auto_closed",
-        summary: `Automatisch gesloten na ${config.poll.idleTimeoutMin} min stilte`,
+        summary: `Automatisch gesloten na ${config.poll.idleTimeoutMin} min stilte, gesprek terug naar de AI`,
       });
     }
   }
@@ -900,14 +950,18 @@ async function markHandled(sessionId: number, m: zipchat.ZipchatMessage): Promis
 
 /* ---------------------------------------------------------------- Afsluiten */
 
+/** Het gesprek terug naar de AI en de escalatie in Zipchat als opgelost. */
+async function handBackToAi(session: Session): Promise<ApiResult<unknown>> {
+  const back = await zipchat.setAssignment(session.zipchatConversationId, null, session.zipchatChatId);
+  if (back.ok) await zipchat.setEscalation(session.zipchatConversationId, true, session.zipchatChatId);
+  return back;
+}
+
 export async function closeSession(sessionId: number, backToAi = true) {
   const session = await store.getSessionById(sessionId);
   if (!session) return { ok: false, message: "Sessie niet gevonden." };
 
-  if (backToAi) {
-    await zipchat.setAssignment(session.zipchatConversationId, null, session.zipchatChatId);
-    await zipchat.setEscalation(session.zipchatConversationId, true, session.zipchatChatId);
-  }
+  if (backToAi) await handBackToAi(session);
   if (session.cmChatId) await cm.endSession(session.cmChatId);
 
   await store.updateSession(sessionId, { status: "closed" });

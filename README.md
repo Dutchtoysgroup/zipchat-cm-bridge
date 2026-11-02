@@ -57,7 +57,9 @@ presence-check als HALO):
   naar Robin. De AI gaat in Zipchat op pauze; de medewerker antwoordt in Robin
   en dat antwoord staat binnen een paar seconden in het chatvenster, als "EXIT
   Toys Klantenservice". Wat de klant daarna typt, gaat via de pollketting naar
-  Robin. Loopt de klant weg, dan mailt de medewerker hem vanuit Robin.
+  Robin. Loopt de klant weg, dan mailt de medewerker hem vanuit Robin. Na 60
+  minuten stilte sluit de sessie en gaat het gesprek terug naar de AI; antwoordt
+  de medewerker daarna toch nog, dan gaat de AI weer op pauze.
 * **Offline → chat met antwoord per e-mail.** Precies zoals de
   offline-overdracht van HALO: het gesprek gaat ook via de Conversational Router
   naar Robin en komt binnen als chat (kanaal CXWebConversations). De medewerker
@@ -103,6 +105,9 @@ als chatbericht, dat bij niemand aankomt. Met de sessie dicht staat hij grijs
 en mailt Robin het antwoord; antwoordt de klant op die mail, dan komt dat in
 hetzelfde gesprek (getest 30 okt). Bij live chat blijft de sessie open, want
 daar moet het antwoord in het chatvenster komen.
+
+Vraagt een klant later in hetzelfde Zipchat-gesprek opnieuw om een collega, dan
+hergebruikt de bridge de gesloten sessie en stuurt hij alleen de nieuwe berichten.
 
 Mislukt de handover, dan probeert de bridge het nog één keer. Lukt het dan nog
 niet, dan maakt hij offline een Online-gesprek aan; bij live chat krijgt de

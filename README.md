@@ -51,7 +51,9 @@ medewerker komen terug in dezelfde chatwidget.
 Precies zoals HALO (Tobi) het deed: live chat sinds 24 oktober 2026, de
 offline-route sinds 30 oktober. Bij elke doorzetting
 vraagt de bridge eerst aan Mobile Service Cloud of er iemand online is (dezelfde
-presence-check als HALO):
+presence-check als HALO, `PRESENCE_URL` met `referrer=HALO`; de referrer bepaalt
+welke webshop Robin controleert, en een onbekende referrer geeft een ander
+antwoord dan HALO):
 
 * **Online → live chat.** Het gesprek gaat via de Conversational Router als chat
   naar Robin. De AI gaat in Zipchat op pauze; de medewerker antwoordt in Robin

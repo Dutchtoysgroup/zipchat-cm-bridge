@@ -56,7 +56,8 @@ presence-check als HALO):
 * **Online → live chat.** Het gesprek gaat via de Conversational Router als chat
   naar Robin. De AI gaat in Zipchat op pauze; de medewerker antwoordt in Robin
   en dat antwoord staat binnen een paar seconden in het chatvenster, als "EXIT
-  Toys Klantenservice". Wat de klant daarna typt, gaat via de pollketting naar
+  Toys Klantenservice". Wat de klant daarna typt, gaat via de pollketting en de
+  adapter uit `CM_FOLLOWUP_ADAPTER_ID` naar
   Robin. Loopt de klant weg, dan mailt de medewerker hem vanuit Robin. Na 60
   minuten stilte sluit de sessie en gaat het gesprek terug naar de AI; antwoordt
   de medewerker daarna toch nog, dan gaat de AI weer op pauze.
@@ -107,7 +108,17 @@ hetzelfde gesprek (getest 30 okt). Bij live chat blijft de sessie open, want
 daar moet het antwoord in het chatvenster komen.
 
 Vraagt een klant later in hetzelfde Zipchat-gesprek opnieuw om een collega, dan
-hergebruikt de bridge de gesloten sessie en stuurt hij alleen de nieuwe berichten.
+hergebruikt de bridge de gesloten sessie, reset hij de routing en stuurt hij
+alleen de nieuwe berichten. In Robin wordt dat een nieuw gesprek.
+
+**Vervolgberichten (getest 2 nov 2026).** Zolang de regel Zipchat bridge → Robin
+uit staat, geeft de router een bericht via onze eigen adapter na de handover niet
+door aan Robin, ook al antwoordt hij 201. Via de adapter Web Conversations
+(`5ff578d6-…`, `CM_FOLLOWUP_ADAPTER_ID`) komt het wel aan: in hetzelfde gesprek, en
+een gearchiveerd gesprek gaat er weer door open, zoals bij HALO. Het chat-id en de
+`conversationHostId` blijven gelijk, en antwoorden uit Robin komen gewoon bij de
+bridge. Dit hangt aan een adapter die ook HALO gebruikte: controleer bij het
+opzeggen van HALO of hij blijft bestaan.
 
 Mislukt de handover, dan probeert de bridge het nog één keer. Lukt het dan nog
 niet, dan maakt hij offline een Online-gesprek aan; bij live chat krijgt de

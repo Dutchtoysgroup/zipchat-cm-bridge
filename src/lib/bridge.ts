@@ -226,6 +226,21 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   // zijn. Wat er toen al heen ging, staat achter de oude cursor en gaat niet
   // nog eens mee; createdAt is het moment van doorzetten, en dat is nu.
   const alVerstuurd = existing ? await store.getForwardCursor(existing.id) : null;
+  // Zonder reset negeert de router een nieuwe handover op deze chat; met reset
+  // komt het gesprek binnen, als nieuw gesprek in Robin (getest 2 nov 2026). Hier
+  // en niet later: het routerSessionEnded-event dat erop volgt, sluit de sessie.
+  if (existing?.cmChatId) {
+    const reset = await cm.resetRouting(existing.cmChatId, "Klant vraagt opnieuw om een collega");
+    await store.logEvent({
+      sessionId: existing.id,
+      direction: "bridge->cm",
+      kind: "escalate.session_reset",
+      ok: reset.ok,
+      statusCode: reset.status,
+      summary: reset.ok ? "Routersessie gereset voor een tweede doorzetting" : `Reset mislukt: ${reset.error}`,
+    });
+    if (!config.mockCm) await new Promise((r) => setTimeout(r, config.cm.resetWaitMs));
+  }
   const session = existing
     ? ((await store.updateSession(existing.id, {
         ...velden,
@@ -397,7 +412,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   // ziet en het antwoord mailt, zoals bij HALO offline. Een paar seconden
   // wachten, zodat Robin het gesprek eerst heeft aangemaakt (zo getest).
   if (!liveChat) {
-    if (!config.mockCm) await new Promise((r) => setTimeout(r, 5_000));
+    if (!config.mockCm) await new Promise((r) => setTimeout(r, config.cm.resetWaitMs));
     const reset = await cm.resetRouting(realChatId, "Offline doorgezet; antwoord per e-mail");
     await store.logEvent({
       sessionId: session.id,
@@ -832,15 +847,19 @@ export async function pollOnce(): Promise<{ checked: number; forwarded: number; 
     let stuck = false;
     for (const m of pending) {
       const text = zipchat.messageText(m);
-      const res = await cm.sendToRouter({
-        chat: cm.buildChat({
-          conversationClientId: session.cmConversationClientId ?? `zipchat:${session.zipchatConversationId}`,
-          clientName: session.customerName,
-          channel: mapChannel(session.channel as Channel),
-          chatId: session.cmChatId ?? undefined,
-        }),
-        conversationMessages: [cm.textMessage(text, "ClientOriginated")],
-      });
+      const adapterId = config.cm.followUpAdapterId ?? config.cm.adapterId;
+      const res = await cm.sendToRouter(
+        {
+          chat: cm.buildChat({
+            conversationClientId: session.cmConversationClientId ?? `zipchat:${session.zipchatConversationId}`,
+            clientName: session.customerName,
+            channel: mapChannel(session.channel as Channel),
+            chatId: session.cmChatId ?? undefined,
+          }),
+          conversationMessages: [cm.textMessage(text, "ClientOriginated")],
+        },
+        adapterId,
+      );
 
       if (res.ok) {
         forwarded++;
@@ -850,7 +869,7 @@ export async function pollOnce(): Promise<{ checked: number; forwarded: number; 
           kind: "poll.forwarded",
           statusCode: res.status,
           summary: `Klantbericht doorgestuurd: "${truncate(text)}"`,
-          payload: { messageId: m.id },
+          payload: { messageId: m.id, adapterId },
         });
       } else {
         const reason = giveUpReason(m, res.status);

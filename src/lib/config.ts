@@ -64,6 +64,13 @@ export const config = {
     /** LogicalAccountId voor routing control (vaak gelijk aan accountId). */
     logicalAccountId: opt("CM_LOGICAL_ACCOUNT_ID") ?? opt("CM_ACCOUNT_ID"),
     adapterId: opt("CM_ADAPTER_ID"),
+    /**
+     * Adapter voor wat de klant na de handover typt. De regel Zipchat bridge →
+     * Robin staat bewust uit (README); via CM_ADAPTER_ID komt zo'n bericht dan
+     * niet aan. Via de adapter Web Conversations wel, ook in hetzelfde gesprek.
+     * Leeg = CM_ADAPTER_ID.
+     */
+    followUpAdapterId: opt("CM_FOLLOWUP_ADAPTER_ID"),
     productToken: opt("CM_PRODUCT_TOKEN"),
     /** Kanaalnaam die CM in het chat-object verwacht. */
     channel: opt("CM_CHANNEL") ?? "CXWebConversations",
@@ -79,6 +86,8 @@ export const config = {
     agentStateNameId: opt("CM_AGENT_STATE_NAME_ID"),
     /** stateNameId om terug te zetten naar de bot, indien gebruikt. */
     botStateNameId: opt("CM_BOT_STATE_NAME_ID"),
+    /** Wachttijd rond een routing-reset, zodat Robin en de router bij zijn (ms). */
+    resetWaitMs: Number(opt("CM_RESET_WAIT_MS") ?? 5_000),
     /** Verifieert inkomende CM-webhooks (header X-Bridge-Token). */
     webhookSecret: opt("CM_WEBHOOK_SECRET"),
     /**

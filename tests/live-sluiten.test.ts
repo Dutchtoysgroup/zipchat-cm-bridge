@@ -8,6 +8,10 @@ vi.hoisted(() => {
   process.env.ZIPCHAT_API_TOKEN = "test-token";
   process.env.CM_PRODUCT_TOKEN = "test-token";
   process.env.ZIPCHAT_SENDER_ID = "31118";
+  process.env.CM_ACCOUNT_ID = "acc";
+  process.env.CM_ADAPTER_ID = "eigen-adapter";
+  process.env.CM_FOLLOWUP_ADAPTER_ID = "web-adapter";
+  process.env.CM_RESET_WAIT_MS = "0";
 });
 
 /** Nep-Zipchat: onthoudt wie het gesprek heeft en weigert een bericht als de AI het heeft. */
@@ -15,12 +19,14 @@ let assignee: number | null;
 let assignmentFails: boolean;
 let sent: string[];
 let routerBerichten: string[][];
+let cmUrls: string[];
 let berichten: Array<{ id: number; role: string; message: string; created_at: string }>;
 
 const nepFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
   const url = new URL(String(input));
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
   if (url.hostname === "api.conversational.cm.com") {
+    cmUrls.push(url.pathname);
     const body = JSON.parse(String(init?.body ?? "{}"));
     if (body.conversationMessages) routerBerichten.push(body.conversationMessages.map((m: { text: string }) => m.text));
     return json({ chat: { id: body.chat?.id ?? "cm-chat" } }, 201);
@@ -62,6 +68,7 @@ beforeEach(() => {
   assignmentFails = false;
   sent = [];
   routerBerichten = [];
+  cmUrls = [];
   berichten = [];
 });
 
@@ -124,7 +131,6 @@ describe("tweede doorzetting in hetzelfde gesprek", () => {
   });
 
   it("hergebruikt de gesloten sessie en stuurt alleen wat nieuw is", async () => {
-    // Live chat, want offline wacht de bridge vijf seconden op Robin.
     await setMode("livechat");
     const klant = { conversationId: "200", chatId: "22036", name: "Test Klant", email: "jan@voorbeeld.nl" };
     berichten = [bericht(1, "user", "eerste vraag"), bericht(2, "assistant", "eerste antwoord")];
@@ -132,8 +138,12 @@ describe("tweede doorzetting in hetzelfde gesprek", () => {
     await store.updateSession(eerste.sessionId!, { status: "closed" });
 
     routerBerichten = [];
+    cmUrls = [];
     berichten.push(bericht(3, "user", "tweede vraag"));
     const tweede = await escalate(klant);
+
+    const volgorde = cmUrls.map((u) => u.split("/").pop());
+    expect(volgorde.slice(0, 3)).toEqual(["reset", "eigen-adapter", "mutationrequests"]);
 
     expect(tweede.ok).toBe(true);
     expect(eerste.sessionId).toBeDefined();
@@ -142,5 +152,23 @@ describe("tweede doorzetting in hetzelfde gesprek", () => {
     expect(verstuurd).toContain("tweede vraag");
     expect(verstuurd).not.toContain("eerste vraag");
     expect(verstuurd).not.toContain("eerste antwoord");
+  });
+});
+
+describe("vervolgbericht in een live chat", () => {
+  it("gaat via de vervolg-adapter, de doorzetting zelf via de eigen adapter", async () => {
+    await setMode("livechat");
+    berichten = [
+      { id: 1, role: "user", message: "eerste vraag", created_at: new Date(Date.now() - 5_000).toISOString() },
+    ];
+    await escalate({ conversationId: "300", chatId: "22036", name: "Test Klant", email: "jan@voorbeeld.nl" });
+    expect(cmUrls.some((u) => u.endsWith("/adapters/eigen-adapter"))).toBe(true);
+
+    cmUrls = [];
+    berichten.push({ id: 2, role: "user", message: "nog een vraag", created_at: new Date().toISOString() });
+    await pollOnce();
+
+    expect(cmUrls).toEqual(["/conversational/twoway/v2/accounts/acc/adapters/web-adapter"]);
+    expect(routerBerichten.flat()).toContain("nog een vraag");
   });
 });

@@ -104,8 +104,8 @@ export function historyMessage(
 
 /* --------------------------------------------------------------- Outbound */
 
-function twowayUrl(): string {
-  return `${config.cm.twowayBaseUrl}/accounts/${config.cm.accountId}/adapters/${config.cm.adapterId}`;
+function twowayUrl(adapterId = config.cm.adapterId): string {
+  return `${config.cm.twowayBaseUrl}/accounts/${config.cm.accountId}/adapters/${adapterId}`;
 }
 
 function mock<T>(data: T): ApiResult<T> {
@@ -118,11 +118,11 @@ export type RouterAck = { chat?: { id?: string; sessionId?: string | null }; mes
  * Stuur berichten naar de Conversational Router (en daarmee richting MSC).
  * Bij succes (201) staat in het antwoord het chat-id dat CM zelf hanteert.
  */
-export async function sendToRouter(payload: TwoWayPayload): Promise<ApiResult<RouterAck>> {
+export async function sendToRouter(payload: TwoWayPayload, adapterId?: string): Promise<ApiResult<RouterAck>> {
   if (config.mockCm) {
     return mock<RouterAck>({ chat: { id: payload.chat.id }, message: "mock: niet echt verstuurd" });
   }
-  return requestJson<RouterAck>(twowayUrl(), {
+  return requestJson<RouterAck>(twowayUrl(adapterId), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

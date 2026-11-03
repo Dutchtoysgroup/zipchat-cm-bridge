@@ -113,6 +113,13 @@ Vraagt een klant later in hetzelfde Zipchat-gesprek opnieuw om een collega, dan
 hergebruikt de bridge de gesloten sessie, reset hij de routing en stuurt hij
 alleen de nieuwe berichten. In Robin wordt dat een nieuw gesprek.
 
+**Wanneer komt er een live chat? (CM-ticket CMCS-95786, getest 3 nov 2026.)** De
+presence-check geeft alleen Online als HALO Livechat open is (nu dinsdag t/m
+vrijdag 08:30-17:00, ingesteld in Robin) en er in die webshop iemand op Online
+staat, of op service hours binnen de openingstijden. Die medewerker krijgt de chat
+met pop-up, als de meldingen in zijn profiel en browser aan staan. Is niemand
+beschikbaar, dan wijst Robin het gesprek aan de webshopeigenaar toe.
+
 **Vervolgberichten (getest 2 nov 2026).** Zolang de regel Zipchat bridge → Robin
 uit staat, geeft de router een bericht via onze eigen adapter na de handover niet
 door aan Robin, ook al antwoordt hij 201. Via de adapter Web Conversations

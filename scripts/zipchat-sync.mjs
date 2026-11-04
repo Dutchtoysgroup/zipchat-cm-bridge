@@ -19,6 +19,9 @@
  * Variabelen zijn in Zipchat alleen-schrijven. Ontbreekt er een op een bot, dan
  * maakt het script hem aan met de waarde uit de env. Een bestaande variabele
  * krijgt alleen een nieuwe waarde met --set-variables (bijv. na roteren).
+ *
+ * Naam en afbeelding van een bot kunnen niet via de API; die regel je in het
+ * dashboard (README, "Een nieuwe landenbot inrichten").
  */
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -166,7 +169,17 @@ async function syncBot(bot) {
     if (APPLY) await api("PATCH", `/chats/${bot.chatId}/custom_tools/${bestaand.id}`, { custom_tool: gewenst });
   }
 
-  // 3. Promptregels als beheerd blok onder de eigen tekst van de bot
+  // 3. Sinds 28 okt 2026 krijgt een nieuwe bot door Zipchat gegenereerde regels.
+  // De andere bots hebben alleen de Additional instructions-regel: de tekst
+  // daaruit staat voor een nieuwe bot in bots.json ('intro'). Uitzetten, niet
+  // verwijderen: zo blijft de originele tekst in het dashboard te zien.
+  const { rules } = await api("GET", `/chats/${bot.chatId}/rules?per_page=100`);
+  for (const regel of rules.filter((r) => r.kind === "generated" && r.active)) {
+    log(`regel "${regel.name}": uitzetten (door Zipchat gegenereerd)`);
+    if (APPLY) await api("PATCH", `/chats/${bot.chatId}/rules/${regel.id}`, { rule: { active: false } });
+  }
+
+  // 4. Promptregels als beheerd blok onder de eigen tekst van de bot
   if (bot.rules === false) {
     log("prompt: geen beheerd blok (bot heeft eigen regels)");
     return;
@@ -178,7 +191,8 @@ async function syncBot(bot) {
   const b = huidig.indexOf(BEGIN);
   const e = huidig.indexOf(END);
   const eigen = b >= 0 && e > b ? `${huidig.slice(0, b)}${huidig.slice(e + END.length)}`.trim() : huidig.trim();
-  const nieuw = `${eigen}\n\n${blok}`;
+  // Zipchat haalt witruimte aan het begin weg: zonder eigen tekst dus geen lege regels.
+  const nieuw = [eigen || (bot.intro ?? "").trim(), blok].filter(Boolean).join("\n\n");
   if (nieuw.length > max) throw new Error(`Prompt van ${bot.domain} wordt ${nieuw.length} tekens, max ${max}`);
   if (nieuw === huidig) {
     log("prompt: ongewijzigd");

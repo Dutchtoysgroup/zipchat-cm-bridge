@@ -1,5 +1,5 @@
 {
-  "_toelichting": "Landenbots die scripts/zipchat-sync.mjs beheert. FR (20749) staat hier bewust niet in: dat is de bot waar de rest op gebaseerd is en hij blijft met de hand beheerd. 'csChannels' zijn de kanalen waarop de klantenservice-skills actief zijn; 'rules' false = de prompt heeft al eigen regels en krijgt geen beheerd blok.",
+  "_toelichting": "Landenbots die scripts/zipchat-sync.mjs beheert. FR (20749) staat hier bewust niet in: dat is de bot waar de rest op gebaseerd is en hij blijft met de hand beheerd. 'csChannels' zijn de kanalen waarop de klantenservice-skills actief zijn; 'rules' false = de prompt heeft al eigen regels en krijgt geen beheerd blok. 'intro' is de eigen tekst boven het beheerde blok voor een bot die er nog geen heeft (nieuw aangemaakt); daarna is die tekst van het dashboard en raakt de sync hem niet meer aan.",
   "bots": [
     {
       "chatId": 21984,
@@ -43,24 +43,26 @@
       "csChannels": ["all channels"]
     },
     {
-      "chatId": 22060,
+      "chatId": 22422,
       "domain": "exittoys.es",
       "lang": "es",
       "shopUrl": "https://www.exittoys.es",
       "contactEmail": "info@exittoys.com",
       "countryName": "España",
       "zipHint": "España: 5 cifras (p. ej. 28001).",
-      "csChannels": ["all channels"]
+      "csChannels": ["all channels"],
+      "intro": "EXIT Toys: equipamiento de juego para exteriores, duradero y con un diseño cuidado, para familias – camas elásticas, piscinas, casitas, columpios y toboganes, estructuras de escalada, karts y porterías de fútbol, además de accesorios y piezas de repuesto. Venta directa online de productos de jardín coordinados, de gama media a premium.\n\nEstilo: escribe en español, como un especialista de producto amable y práctico: claro, atento a la seguridad y a la familia, seguro con las especificaciones y sincero sobre lo que no puedes ver. Haz primero 1–3 preguntas breves (espacio y medidas del jardín, edad y número de niños, superficie y ubicación, uso, accesorios, plazo) y da recomendaciones concretas con los accesorios compatibles, las medidas clave, la seguridad y lo que implica el montaje. Ante retrasos, piezas que faltan, defectos o devoluciones: reconoce la frustración, no hagas promesas y da los siguientes pasos; sugiere tener a mano fotos y números de pieza para resolverlo más rápido."
     },
     {
-      "chatId": 22061,
+      "chatId": 22421,
       "domain": "exittoys.it",
       "lang": "it",
       "shopUrl": "https://www.exittoys.it",
       "contactEmail": "info@exittoys.com",
       "countryName": "Italia",
       "zipHint": "Italia: CAP di 5 cifre (es. 20121).",
-      "csChannels": ["all channels"]
+      "csChannels": ["all channels"],
+      "intro": "EXIT Toys: attrezzature da gioco per esterni per bambini e famiglie – trampolini, piscine, casette, altalene, scivoli, strutture da arrampicata, articoli sportivi, accessori e ricambi. Marchio con vendita diretta online: design curato, attenzione a sicurezza, robustezza e materiali resistenti, con opzioni in legno certificato FSC e accessori modulari.\n\nStile: scrivi in italiano, con tono familiare, competente e pratico. Fai prima 1–3 domande brevi (età dei bambini, spazio disponibile e misure, budget, uso previsto). Rispondi con chiarezza su sicurezza, materiali, modularità e montaggio, senza esagerare le promesse. Se il cliente ha dubbi su prezzo, montaggio, spazio o durata, confronta modelli e misure ed evidenzia sicurezza e design compatto. Dai raccomandazioni concrete con accessori e ricambi compatibili e i passi successivi; non inventare tempi, costi o condizioni."
     },
     {
       "chatId": 22062,

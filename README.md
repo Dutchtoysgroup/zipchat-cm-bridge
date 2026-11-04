@@ -470,16 +470,16 @@ gedeelde inbox te zien is wie het oppakt; het dashboard heeft een kolom Land.
 | `21984` | exittoys.nl | nl | sync; klantenservice-skills alleen in de websitechat (`chat`), Instagram houdt de influencertool |
 | `22036` | exittoys.be | nl | sync |
 | `22057` · `22059` | exittoys.dk · .se | da · sv | sync |
-| `22060` · `22061` | exittoys.es · .it | es · it | sync |
 | `22062` · `22063` | exittoys.co.uk · .ie | en | sync |
 | `22064` | exittoys.pl | pl | sync |
 | `22066` · `22067` | exittoys.de · .at | de | sync |
+| `22422` · `22421` | exittoys.es · .it | es · it | sync; op 4 nov 2026 opnieuw aangemaakt (vervangen `22060` · `22061`) |
 
-**Skills en promptregels komen uit de repo.** Per taal staan de vier
-klantenservice-skills (doorzetten, tracking, retour, klacht) en de promptregels
-in `zipchat-tool/skills/<taal>/`; per bot staan land, taal, webshop-URL,
-contactadres en postcodeformaat in `zipchat-tool/bots.json`. Het script zet ze
-op Zipchat:
+**Skills en promptregels komen uit de repo.** Per taal staan de vijf
+klantenservice-skills (doorzetten, verificatie, tracking, retour, klacht) en de
+promptregels in `zipchat-tool/skills/<taal>/`; per bot staan land, taal,
+webshop-URL, contactadres en postcodeformaat in `zipchat-tool/bots.json`. Het
+script zet ze op Zipchat:
 
 ```bash
 node scripts/zipchat-sync.mjs            # proefdraai: laat zien wat er verandert
@@ -494,6 +494,30 @@ nieuwe waarde met `--set-variables`. Een wijziging in het dashboard aan een
 beheerde skill of aan het blok tussen de `EXIT-regels`-markers in de prompt
 wordt bij de volgende sync overschreven: pas de bron aan. De eigen tekst van een
 bot boven dat blok blijft van het dashboard.
+
+**Een nieuwe landenbot inrichten.** Zipchat geeft een nieuwe bot sinds 28 oktober
+2026 een eigen naam ("EXIT Toys AI") en gegenereerde regels, maar geen skills of
+variabelen. Zo gaat hij gelijk lopen met de andere:
+
+1. Zet de bot in `zipchat-tool/bots.json`, met het nieuwe chat-id en in `intro`
+   de eigen tekst boven het beheerde blok (wat EXIT Toys is, en de schrijfstijl
+   in de taal van het land). `intro` telt alleen zolang de bot nog geen eigen
+   tekst heeft.
+2. Draai de sync met `--only <chat_id>`, met `MSC_BRIDGE_SECRET` als de echte
+   waarde van `BRIDGE_SHARED_SECRET` op de bridge. Variabelen krijgen de waarde
+   uit de env, dus nooit met een dummywaarde. De sync maakt de variabelen en
+   skills aan, zet het blok in de prompt en zet de gegenereerde regels uit; die
+   blijven uitgeschakeld in het dashboard staan.
+3. Controleer of `ZIPCHAT_SENDER_ID` lid is van de bot (zie onder).
+4. Naam, afbeelding, kleuren, CSS en pop-up kunnen niet via de API: die regel je
+   in het dashboard. De waarden staan in `zipchat-tool/widget-instellingen.md`,
+   de afbeelding in `zipchat-tool/tobi-avatar.jpg`.
+5. Zet het widget-token van de nieuwe bot in de variabele `zipchat` op de webshop.
+   Zonder dat verschijnt de chat daar niet.
+
+De bridge hoeft niet aangepast te worden: `src/lib/shops.ts` haalt de bots elk
+kwartier op uit `GET /chats`, en het land volgt uit het domein. Alleen een land
+dat nog niet in `SERVICE` en `QUESTION` staat, moet daar worden toegevoegd.
 
 Wat je moet weten over de skills:
 

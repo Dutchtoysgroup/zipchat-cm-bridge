@@ -33,7 +33,7 @@ const COPY: Record<string, Copy> = {
     ignore:
       "Heb je dit niet zelf aangevraagd? Dan kun je deze e-mail negeren. Zonder deze code kan niemand je bestellingen inzien.",
     noreply: (shop) => `Dit is een automatische e-mail. Heb je een vraag? Stel hem gerust in de chat op ${shop}.`,
-    signoff: "Sportieve groet,<br>Team EXIT Toys",
+    signoff: "Met speelse groet,<br>Team EXIT Toys",
   },
   de: {
     subject: "Dein Bestätigungscode von EXIT Toys",
@@ -45,7 +45,7 @@ const COPY: Record<string, Copy> = {
     ignore:
       "Hast du das nicht selbst angefordert? Dann kannst du diese E-Mail ignorieren. Ohne diesen Code kann niemand deine Bestellungen einsehen.",
     noreply: (shop) => `Dies ist eine automatische E-Mail. Hast du eine Frage? Stell sie gern im Chat auf ${shop}.`,
-    signoff: "Sportliche Grüße,<br>Dein EXIT Toys Team",
+    signoff: "Verspielte Grüße,<br>Dein EXIT Toys Team",
   },
   fr: {
     subject: "Votre code de vérification EXIT Toys",
@@ -58,7 +58,7 @@ const COPY: Record<string, Copy> = {
       "Vous n'êtes pas à l'origine de cette demande ? Vous pouvez ignorer cet e-mail. Sans ce code, personne ne peut consulter vos commandes.",
     noreply: (shop) =>
       `Ceci est un e-mail automatique. Une question ? Posez-la volontiers dans le chat sur ${shop}.`,
-    signoff: "Sportivement,<br>L'équipe EXIT Toys",
+    signoff: "Ludiquement vôtre,<br>L'équipe EXIT Toys",
   },
   en: {
     subject: "Your EXIT Toys verification code",
@@ -70,7 +70,7 @@ const COPY: Record<string, Copy> = {
     ignore:
       "Didn't request this? Then you can ignore this email. Without this code, nobody can see your orders.",
     noreply: (shop) => `This is an automated email. Got a question? Just ask it in the chat on ${shop}.`,
-    signoff: "Sporty regards,<br>Team EXIT Toys",
+    signoff: "Playful regards,<br>Team EXIT Toys",
   },
   da: {
     subject: "Din bekræftelseskode fra EXIT Toys",
@@ -82,7 +82,7 @@ const COPY: Record<string, Copy> = {
     ignore:
       "Har du ikke selv bedt om dette? Så kan du se bort fra denne e-mail. Uden koden kan ingen se dine ordrer.",
     noreply: (shop) => `Dette er en automatisk e-mail. Har du et spørgsmål? Stil det gerne i chatten på ${shop}.`,
-    signoff: "Sportslig hilsen,<br>Team EXIT Toys",
+    signoff: "Legende hilsner,<br>Team EXIT Toys",
   },
   sv: {
     subject: "Din verifieringskod från EXIT Toys",
@@ -94,7 +94,7 @@ const COPY: Record<string, Copy> = {
     ignore:
       "Har du inte bett om detta själv? Då kan du bortse från det här mejlet. Utan koden kan ingen se dina beställningar.",
     noreply: (shop) => `Det här är ett automatiskt mejl. Har du en fråga? Ställ den gärna i chatten på ${shop}.`,
-    signoff: "Sportiga hälsningar,<br>Team EXIT Toys",
+    signoff: "Lekfulla hälsningar,<br>Team EXIT Toys",
   },
   es: {
     subject: "Tu código de verificación de EXIT Toys",
@@ -106,7 +106,7 @@ const COPY: Record<string, Copy> = {
     ignore:
       "¿No lo has solicitado tú? Entonces puedes ignorar este correo. Sin este código nadie puede ver tus pedidos.",
     noreply: (shop) => `Este es un correo automático. ¿Tienes alguna pregunta? Hazla en el chat de ${shop}.`,
-    signoff: "Un saludo deportivo,<br>El equipo de EXIT Toys",
+    signoff: "Un saludo juguetón,<br>El equipo de EXIT Toys",
   },
   it: {
     subject: "Il tuo codice di verifica EXIT Toys",
@@ -118,7 +118,7 @@ const COPY: Record<string, Copy> = {
     ignore:
       "Non l'hai richiesto tu? Allora puoi ignorare questa e-mail. Senza questo codice nessuno può vedere i tuoi ordini.",
     noreply: (shop) => `Questa è un'e-mail automatica. Hai una domanda? Chiedila pure nella chat di ${shop}.`,
-    signoff: "Saluti sportivi,<br>Il team EXIT Toys",
+    signoff: "Saluti giocosi,<br>Il team EXIT Toys",
   },
   pl: {
     subject: "Twój kod weryfikacyjny EXIT Toys",
@@ -130,7 +130,7 @@ const COPY: Record<string, Copy> = {
     ignore:
       "To nie Ty? W takim razie zignoruj tę wiadomość. Bez tego kodu nikt nie zobaczy Twoich zamówień.",
     noreply: (shop) => `To jest wiadomość automatyczna. Masz pytanie? Zadaj je na czacie na ${shop}.`,
-    signoff: "Sportowe pozdrowienia,<br>Zespół EXIT Toys",
+    signoff: "Pozdrawiamy na wesoło,<br>Zespół EXIT Toys",
   },
 };
 
@@ -176,11 +176,11 @@ export function verifyMail(params: { code: string; lang: string; shop: string; m
         <tr>
           <td align="center" bgcolor="${GREEN}" style="background-color:${GREEN};border-radius:20px 20px 0 0;padding:28px 24px 22px">
             <img src="cid:${LOGO_CID}" width="122" height="91" alt="EXIT Toys" style="display:block;border:0;outline:none;width:122px;height:91px">
-            <p style="margin:14px 0 0;font-family:${HEAD};font-size:20px;line-height:24px;letter-spacing:1px;color:#ffffff;white-space:nowrap">GO PLAY OUTSIDE!</p>
+            <p style="margin:14px 0 0;font-family:${HEAD};font-size:20px;line-height:24px;letter-spacing:1px;color:#ffffff;white-space:nowrap">GO PLAY!</p>
           </td>
         </tr>
         <tr>
-          <td bgcolor="#ffffff" style="background-color:#ffffff;padding:32px 28px 8px">
+          <td bgcolor="#ffffff" align="center" style="background-color:#ffffff;padding:32px 28px 8px;text-align:center">
             <h1 style="margin:0 0 14px;font-family:${HEAD};font-size:28px;line-height:32px;font-weight:400;text-transform:uppercase;color:${DARK_GREEN}">${escapeHtml(c.heading)}</h1>
             <p style="margin:0;font-family:${BODY};font-size:17px;line-height:25px;font-weight:500;color:#2f3a2a">${escapeHtml(c.intro(params.shop)).replace(shop, `<strong>${shop}</strong>`)}</p>
           </td>
@@ -204,7 +204,7 @@ export function verifyMail(params: { code: string; lang: string; shop: string; m
                 <td bgcolor="#eef6fb" style="background-color:#eef6fb;border-left:4px solid ${LIGHT_BLUE};border-radius:8px;padding:14px 16px;font-family:${BODY};font-size:15px;line-height:21px;font-weight:500;color:#3b4a55">${escapeHtml(c.ignore)}</td>
               </tr>
             </table>
-            <p style="margin:24px 0 0;font-family:${BODY};font-size:17px;line-height:24px;font-weight:600;color:#2f3a2a">${c.signoff}</p>
+            <p align="center" style="margin:24px 0 0;font-family:${BODY};font-size:17px;line-height:24px;font-weight:600;color:#2f3a2a;text-align:center">${c.signoff}</p>
           </td>
         </tr>
         <tr>

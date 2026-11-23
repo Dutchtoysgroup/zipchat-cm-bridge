@@ -208,6 +208,15 @@ export const config = {
    * alleen dat bedankje (17 van de 86 tussen 1 en 22 nov 2026). 0 zet dit uit.
    */
   repeatWindowMin: Number(opt("ESCALATION_REPEAT_WINDOW_MIN") ?? 10),
+  /**
+   * Zoveel seconden blijft de routersessie na een doorzetting per e-mail open.
+   * Wat de klant in die tijd nog schrijft, zet de poller door naar hetzelfde
+   * gesprek in Robin; daarna volgt de reset en mailt Robin het antwoord. Na de
+   * reset komt een vervolgbericht nergens meer aan (getest 23 nov 2026). De
+   * bedankjes kwamen 20-60 s na de doorzetting. 0 = meteen resetten, zoals
+   * vóór 23 nov.
+   */
+  mailFollowUpSec: Number(opt("ESCALATION_MAIL_FOLLOWUP_SEC") ?? 120),
 
   robin: {
     /**

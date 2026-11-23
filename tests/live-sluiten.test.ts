@@ -181,27 +181,64 @@ describe("klant reageert na een doorzetting per e-mail", () => {
     created_at: new Date(Date.now() - 60_000 + id).toISOString(),
   });
   const klant = { conversationId: "400", chatId: "22036", name: "Test Klant", email: "jan@voorbeeld.nl" };
+  const laatste = () => cmUrls.map((u) => u.split("/").pop());
 
-  it("zet het bedankje bij het bestaande gesprek in plaats van een tweede doorzetting", async () => {
+  it("houdt de routersessie open en zet een bedankje bij hetzelfde gesprek", async () => {
     await setMode("email");
     berichten = [bericht(1, "user", "mijn vraag"), bericht(2, "assistant", "ik zet je door")];
     const eerste = await escalate(klant);
-    // Wat het RouterSessionEnded-event na de routing-reset doet.
-    await store.updateSession(eerste.sessionId!, { status: "closed" });
+    expect(laatste()).toContain("mutationrequests");
+    expect(laatste()).not.toContain("reset");
+    expect((await store.getSessionById(eerste.sessionId!))?.status).toBe("active");
 
     routerBerichten = [];
     cmUrls = [];
     berichten.push(bericht(3, "assistant", "je vraag is doorgegeven"), bericht(4, "user", "Bedankt!"));
-    const tweede = await escalate(klant);
+    await pollOnce();
 
-    expect(tweede.ok).toBe(true);
-    expect(tweede.sessionId).toBe(eerste.sessionId);
-    expect(tweede.message).toContain("net al doorgezet");
-    expect(cmUrls.map((u) => u.split("/").pop())).toEqual(["web-adapter"]);
+    expect(laatste()).toEqual(["web-adapter"]);
     expect(routerBerichten).toEqual([["Bedankt!"]]);
+    expect((await store.getSessionById(eerste.sessionId!))?.status).toBe("active");
   });
 
-  it("maakt na het venster wel een nieuwe doorzetting", async () => {
+  it("maakt geen tweede doorzetting als de bot de tool opnieuw aanroept", async () => {
+    await setMode("email");
+    berichten = [bericht(1, "user", "mijn vraag")];
+    const eerste = await escalate({ ...klant, conversationId: "402" });
+
+    cmUrls = [];
+    berichten.push(bericht(4, "user", "mijn ordernummer is 123"));
+    const tweede = await escalate({ ...klant, conversationId: "402" });
+
+    expect(tweede.sessionId).toBe(eerste.sessionId);
+    expect(tweede.message).toContain("komt bij die vraag te staan");
+    expect(cmUrls).toEqual([]);
+
+    // De poller zet het bericht door, niet de tool.
+    await pollOnce();
+    expect(routerBerichten.at(-1)).toEqual(["mijn ordernummer is 123"]);
+  });
+
+  it("sluit de routersessie na het vervolgvenster, en belooft daarna niets meer", async () => {
+    await setMode("email");
+    berichten = [bericht(1, "user", "mijn vraag")];
+    const eerste = await escalate({ ...klant, conversationId: "403" });
+    const voorbij = new Date(Date.now() - (config.mailFollowUpSec + 5) * 1000);
+    await store.updateSession(eerste.sessionId!, { createdAt: voorbij });
+
+    cmUrls = [];
+    await pollOnce();
+    expect(laatste()).toEqual(["reset"]);
+    expect((await store.getSessionById(eerste.sessionId!))?.status).toBe("closed");
+
+    cmUrls = [];
+    berichten.push(bericht(5, "user", "nog een ordernummer: 456"));
+    const later = await escalate({ ...klant, conversationId: "403" });
+    expect(later.message).toContain("NIET meer");
+    expect(cmUrls).toEqual([]);
+  });
+
+  it("maakt na het herhaalvenster wel een nieuwe doorzetting", async () => {
     await setMode("email");
     berichten = [bericht(1, "user", "mijn vraag")];
     const eerste = await escalate({ ...klant, conversationId: "401" });
@@ -212,6 +249,6 @@ describe("klant reageert na een doorzetting per e-mail", () => {
     berichten.push(bericht(5, "user", "nieuwe vraag"));
     await escalate({ ...klant, conversationId: "401" });
 
-    expect(cmUrls.map((u) => u.split("/").pop())).toContain("mutationrequests");
+    expect(laatste()).toContain("mutationrequests");
   });
 });

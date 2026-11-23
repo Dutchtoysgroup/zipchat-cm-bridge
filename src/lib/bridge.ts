@@ -166,12 +166,7 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   }
 
   const existing = await store.getSessionByZipchatConversation(conversationId);
-  if (existing && isRecentMailHandover(existing)) {
-    const added = await addToMailHandover(existing, conv.data?.messages ?? []);
-    if (added) return added;
-    // Doorsturen mislukt: dan toch een nieuwe doorzetting, zodat wat de klant
-    // nog schreef niet verloren gaat.
-  }
+  if (existing && isRecentMailHandover(existing)) return repeatMailHandover(existing);
   if (existing && (existing.status === "escalating" || existing.status === "active")) {
     await store.logEvent({
       sessionId: existing.id,
@@ -415,9 +410,19 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   }
 
   // Offline: de routersessie afsluiten, zodat Robin de klant niet als online
-  // ziet en het antwoord mailt, zoals bij HALO offline. Een paar seconden
-  // wachten, zodat Robin het gesprek eerst heeft aangemaakt (zo getest).
-  if (!liveChat) {
+  // ziet en het antwoord mailt, zoals bij HALO offline. Met een vervolgvenster
+  // doet de poller dat pas na mailFollowUpSec: tot dan komt wat de klant nog
+  // schrijft ("bedankt", een ordernummer) in hetzelfde gesprek in Robin.
+  if (!liveChat && config.mailFollowUpSec > 0) {
+    await store.logEvent({
+      sessionId: session.id,
+      direction: "internal",
+      kind: "escalate.mail_window",
+      summary: `Routersessie blijft ${config.mailFollowUpSec} s open voor vervolgberichten; daarna sluit de poller hem en mailt Robin het antwoord`,
+    });
+  } else if (!liveChat) {
+    // Een paar seconden wachten, zodat Robin het gesprek eerst heeft
+    // aangemaakt (zo getest).
     if (!config.mockCm) await new Promise((r) => setTimeout(r, config.cm.resetWaitMs));
     const reset = await cm.resetRouting(realChatId, "Offline doorgezet; antwoord per e-mail");
     await store.logEvent({
@@ -498,12 +503,10 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
 }
 
 /**
- * Net per e-mail doorgezet? Na de doorzetting sluit de bridge de routersessie
- * (routing/reset), en het RouterSessionEnded-event dat volgt zet de sessie op
- * closed. Zegt de klant daarna "bedankt", dan roept de bot de tool vaak nog
- * eens aan. Zonder deze controle werd dat een tweede doorzetting: in Robin een
- * nieuw gesprek met alleen het bedankje, dat de klantenservice als "dubbel"
- * archiveerde (nov 2026).
+ * Net per e-mail doorgezet? Zegt de klant daarna "bedankt", dan roept de bot de
+ * tool vaak nog eens aan. Zonder deze controle werd dat een tweede doorzetting:
+ * in Robin een nieuw gesprek met alleen het bedankje, dat de klantenservice als
+ * "dubbel" archiveerde (17 van de 86 tussen 1 en 22 nov 2026).
  */
 function isRecentMailHandover(session: Session): boolean {
   if (config.repeatWindowMin <= 0 || session.mode !== "email" || !session.cmChatId) return false;
@@ -512,60 +515,46 @@ function isRecentMailHandover(session: Session): boolean {
 }
 
 /**
- * Wat de klant na de doorzetting nog schreef, gaat als vervolgbericht naar het
- * bestaande gesprek in Robin, via dezelfde adapter als bij live chat. Soms is
- * het meer dan een bedankje: een kortingscode, een ordernummer, een
- * huisnummer. Geeft null terug als doorsturen niet lukte.
+ * Staat de routersessie van deze e-mailsessie nog open? Dan zet de poller wat
+ * de klant nog schrijft door naar het gesprek in Robin, en sluit hij de sessie
+ * pas als het venster om is (mailFollowUpSec). Na die reset komt een
+ * vervolgbericht nergens meer aan: CM geeft wel 201, maar opent een nieuwe
+ * routersessie die niet naar Robin gaat (getest 23 nov 2026).
  */
-async function addToMailHandover(session: Session, messages: zipchat.ZipchatMessage[]): Promise<EscalateResult | null> {
-  const cursor = await store.getForwardCursor(session.id);
-  const sinceIso = (session.lastForwardedAt ?? session.createdAt).toISOString();
-  const nieuw = messages
-    .filter((m) => m.role === "user" && !m.manual_reply && isPending(m, cursor, sinceIso))
-    .sort(byMessageId);
-  const adapterId = config.cm.followUpAdapterId ?? config.cm.adapterId;
+function mailRouterOpen(session: Session): boolean {
+  return (
+    config.mailFollowUpSec > 0 &&
+    session.mode === "email" &&
+    session.status === "active" &&
+    !!session.cmChatId &&
+    !session.cmChatId.startsWith("robin:") &&
+    !session.zipchatConversationId.startsWith("zonder-id-")
+  );
+}
 
-  for (const m of nieuw) {
-    const text = zipchat.messageText(m);
-    const res = await cm.sendToRouter(
-      {
-        chat: cm.buildChat({
-          conversationClientId: session.cmConversationClientId ?? `zipchat:${session.zipchatConversationId}`,
-          clientName: session.customerName,
-          channel: mapChannel(session.channel as Channel),
-          chatId: session.cmChatId ?? undefined,
-        }),
-        conversationMessages: [cm.textMessage(text, "ClientOriginated")],
-      },
-      adapterId,
-    );
-    await store.logEvent({
-      sessionId: session.id,
-      direction: "bridge->cm",
-      kind: "escalate.repeat_forwarded",
-      ok: res.ok,
-      statusCode: res.status,
-      summary: res.ok
-        ? `Na de doorzetting nog geschreven, aan het bestaande gesprek toegevoegd: "${truncate(text)}"`
-        : `Toevoegen aan het bestaande gesprek mislukt (${res.error}); er komt een nieuwe doorzetting: "${truncate(text)}"`,
-      payload: { messageId: m.id, adapterId },
-    });
-    if (!res.ok) return null;
-    await markHandled(session.id, m);
-  }
-
+/**
+ * De bot roept de tool opnieuw aan kort na een doorzetting per e-mail. Er komt
+ * geen tweede gesprek in Robin. Staat de routersessie nog open, dan zet de
+ * poller de nieuwe berichten door naar het bestaande gesprek; is hij al dicht,
+ * dan kan dat niet meer en moet de klant aanvullen via de e-mail.
+ */
+async function repeatMailHandover(session: Session): Promise<EscalateResult> {
+  const open = mailRouterOpen(session);
+  const seconden = Math.round((Date.now() - new Date(session.createdAt).getTime()) / 1000);
   await store.logEvent({
     sessionId: session.id,
     direction: "zipchat->bridge",
     kind: "escalate.repeat",
-    summary: `Al doorgezet ${Math.round((Date.now() - new Date(session.createdAt).getTime()) / 1000)} s geleden — geen tweede gesprek in Robin${nieuw.length ? `, ${nieuw.length} bericht(en) toegevoegd` : ""}`,
+    summary: open
+      ? `Al doorgezet ${seconden} s geleden — geen tweede gesprek in Robin; de poller zet nieuwe berichten bij het bestaande gesprek`
+      : `Al doorgezet ${seconden} s geleden — geen tweede gesprek in Robin; routersessie al dicht, klant vult aan via de e-mail`,
   });
   return {
     ok: true,
     sessionId: session.id,
     cmChatId: session.cmChatId ?? undefined,
     mode: "email",
-    message: repeatHandoverMessage(),
+    message: repeatHandoverMessage(open),
   };
 }
 
@@ -759,6 +748,24 @@ export async function handleAgentReply(payload: cm.TwoWayPayload): Promise<{ ok:
 
   if (session.mode === "livechat") return deliverToWidget(session, texts, sender);
 
+  // Antwoord binnen het vervolgvenster: de routersessie stond nog open, dus
+  // Robin zag de klant als online en stuurde dit als chatbericht, niet per
+  // mail. Meteen dichtdoen, zodat het volgende antwoord wel gemaild wordt, en
+  // de klantenservice waarschuwen via het logboek.
+  if (mailRouterOpen(session)) {
+    await closeMailWindow(session);
+    await store.logEvent({
+      sessionId: session.id,
+      direction: "cm->bridge",
+      kind: "agent_reply.in_window",
+      ok: false,
+      summary: `Antwoord${sender ? ` van ${sender}` : ""} binnen ${config.mailFollowUpSec} s na de doorzetting, als chatbericht: Robin mailt dit mogelijk niet. Stuur het in Robin opnieuw per e-mail: "${truncate(texts.join(" "))}"`,
+      payload: { text: texts },
+    });
+    await store.updateSession(session.id, { lastAgentReplyAt: new Date(), ...(sender ? { agentName: sender } : {}) });
+    return { ok: true, delivered: 0, message: "Antwoord binnen het vervolgvenster; routersessie nu gesloten." };
+  }
+
   // Geen live chat: Robin mailt het antwoord zelf naar het e-mailadres uit de
   // handover, zoals bij de offline-overdracht van HALO. Gezien in het
   // datawarehouse: klanten mailden terug op "Contact with EXIT Toys …" terwijl
@@ -818,14 +825,42 @@ async function deliverToWidget(
 /* --------------------------------------- Klantberichten pollen (Zipchat heeft geen webhook) */
 
 /**
- * Alleen live-chatsessies met een echt Zipchat-gesprek zijn de moeite waard.
- * In e-mailmodus praat de klant gewoon door met de AI; die berichten horen
- * niet bij CM. En een sessie zonder gespreks-id heeft niets om op te halen.
+ * Live-chatsessies met een echt Zipchat-gesprek, en e-mailsessies zolang hun
+ * routersessie nog openstaat (mailRouterOpen). Daarna praat de klant in
+ * e-mailmodus gewoon door met de AI; die berichten horen niet bij CM. Een
+ * sessie zonder gespreks-id heeft niets om op te halen.
  */
 async function pollableSessions(): Promise<Session[]> {
   return (await store.listOpenSessions()).filter(
-    (s) => s.mode === "livechat" && !s.zipchatConversationId.startsWith("zonder-id-"),
+    (s) => (s.mode === "livechat" && !s.zipchatConversationId.startsWith("zonder-id-")) || mailRouterOpen(s),
   );
+}
+
+/**
+ * Het vervolgvenster na een doorzetting per e-mail is om: de routersessie
+ * dicht, zodat Robin de klant niet meer als online ziet en het antwoord mailt.
+ * De sessie gaat meteen op closed; het RouterSessionEnded-event dat volgt
+ * verandert daar niets meer aan. Lukt de reset niet, dan volgende ronde opnieuw.
+ */
+async function closeMailWindow(session: Session): Promise<boolean> {
+  const reset = await cm.resetRouting(session.cmChatId!, "Offline doorgezet; antwoord per e-mail");
+  await store.logEvent({
+    sessionId: session.id,
+    direction: "bridge->cm",
+    kind: "escalate.session_reset",
+    ok: reset.ok,
+    statusCode: reset.status,
+    summary: reset.ok
+      ? `Vervolgvenster van ${config.mailFollowUpSec} s om, routersessie afgesloten: Robin mailt het antwoord`
+      : `Routersessie afsluiten mislukt: ${reset.error}. Volgende ronde opnieuw`,
+  });
+  if (!reset.ok) {
+    waitLonger(session.id);
+    return false;
+  }
+  await store.updateSession(session.id, { status: "closed" });
+  backoff.delete(session.id);
+  return true;
 }
 
 /** bridge_settings: wanneer /api/poll voor het laatst liep, voor het dashboard. */
@@ -979,6 +1014,14 @@ export async function pollOnce(): Promise<{ checked: number; forwarded: number; 
       await markHandled(session.id, m);
     }
     if (!stuck) backoff.delete(session.id);
+
+    // E-mailsessie: na het vervolgvenster de routersessie dicht. Niet als er
+    // net nog iets bleef hangen; dat moet eerst aankomen.
+    if (session.mode === "email") {
+      const verlopen = Date.now() - new Date(session.createdAt).getTime() >= config.mailFollowUpSec * 1000;
+      if (verlopen && !stuck && (await closeMailWindow(session))) closed++;
+      continue;
+    }
 
     // Stille sessies netjes afsluiten.
     const idleMs = Date.now() - new Date(session.updatedAt).getTime();
@@ -1188,9 +1231,12 @@ function liveHandoverMessage(): string {
 }
 
 /** Al doorgezet: de bot moet gewoon op de klant reageren, niet alles herhalen. */
-function repeatHandoverMessage(): string {
+function repeatHandoverMessage(open: boolean): string {
+  const vervolg = open
+    ? "Wat de klant daarna nog schreef, komt bij die vraag te staan; er komt geen tweede melding."
+    : "Wat de klant nu nog schrijft, komt NIET meer bij de collega aan. Bevat het laatste bericht nieuwe informatie (een ordernummer, adres, foto of extra vraag), zeg dan dat de klant die kan toevoegen door te antwoorden op de e-mail van de klantenservice. Zeg niet dat je het hebt genoteerd of doorgegeven.";
   return [
-    "Dit gesprek is net al doorgezet naar de klantenservice. Wat de klant daarna nog schreef, staat bij die vraag; er komt geen tweede melding.",
+    `Dit gesprek is net al doorgezet naar de klantenservice. ${vervolg}`,
     "Zeg niet opnieuw dat de vraag is doorgegeven en roep deze tool voor dezelfde vraag niet nog eens aan.",
     "Reageer kort en vriendelijk op het laatste bericht van de klant, in de taal van het gesprek.",
   ].join("\n");

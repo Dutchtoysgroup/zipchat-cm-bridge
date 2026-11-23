@@ -53,10 +53,11 @@ export async function POST(req: Request) {
     chatId: d.chat_id,
   });
 
-  // Een live handover moet meteen gepolld worden; wachten op de volgende cron
-  // zou de klant minuten kosten. Andersom hoeft die cron daardoor nog maar
-  // zelden te draaien, wat de database (en dus de rekening) laat slapen.
-  if (result.ok && result.mode === "livechat") {
+  // Een handover moet meteen gepolld worden; wachten op de volgende cron zou
+  // de klant minuten kosten. Ook per e-mail: dan zet de poller vervolgberichten
+  // door en sluit hij de routersessie na het vervolgvenster. Andersom hoeft die
+  // cron daardoor nog maar zelden te draaien, wat de database laat slapen.
+  if (result.ok) {
     const origin = originOf(req);
     after(() => kickPoll(origin));
   }

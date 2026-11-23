@@ -102,24 +102,36 @@ het gesprek aan in EXIT Toys Nederland en negeerde de handover. Het
 e-mailadres bleef leeg, dus Robin kon niet mailen.
 
 **Offline sluit de bridge daarna de routersessie af** (`POST
-…/chats/{chat}/routing/reset`, 5 seconden na de handover). Zolang de sessie
-loopt, staat de klant in Robin groen ("online") en gaat een antwoord alleen
-als chatbericht, dat bij niemand aankomt. Met de sessie dicht staat hij grijs
-en mailt Robin het antwoord; antwoordt de klant op die mail, dan komt dat in
-hetzelfde gesprek (getest 30 okt). Bij live chat blijft de sessie open, want
-daar moet het antwoord in het chatvenster komen.
+…/chats/{chat}/routing/reset`). Zolang de sessie loopt, staat de klant in Robin
+groen ("online") en gaat een antwoord alleen als chatbericht, dat bij niemand
+aankomt. Met de sessie dicht staat hij grijs en mailt Robin het antwoord;
+antwoordt de klant op die mail, dan komt dat in hetzelfde gesprek (getest 30
+okt). Bij live chat blijft de sessie open, want daar moet het antwoord in het
+chatvenster komen.
 
-**Na de doorzetting nog een bericht (sinds 23 nov 2026).** Zegt de klant na
-een doorzetting per e-mail nog "bedankt", dan roept de bot de tool vaak opnieuw
-aan. Dat werd een tweede gesprek in Robin met alleen dat bedankje: 17 van de 86
-doorzettingen van 1 tot 22 nov, door de klantenservice als "dubbel"
-gearchiveerd. Soms stond er wel iets nuttigs in (een kortingscode, een
-ordernummer). Binnen `ESCALATION_REPEAT_WINDOW_MIN` minuten (standaard 10) na de
-doorzetting komt er daarom geen nieuwe doorzetting: wat de klant nog schreef,
-gaat als vervolgbericht via `CM_FOLLOWUP_ADAPTER_ID` naar het bestaande gesprek,
-en de bot reageert gewoon op de klant. Mislukt dat doorsturen, dan volgt toch
-een nieuwe doorzetting, zodat er niets verloren gaat. In het logboek:
-`escalate.repeat` en `escalate.repeat_forwarded`.
+**Het vervolgvenster (sinds 23 nov 2026).** Klanten schrijven na een
+doorzetting per e-mail vaak nog iets: meestal "bedankt", soms een ordernummer,
+kortingscode of huisnummer. Tot 23 nov sloot de bridge de routersessie 5 s na
+de doorzetting. Riep de bot de tool daarna opnieuw aan, dan werd dat een tweede
+gesprek in Robin (17 van de 86 doorzettingen van 1 tot 22 nov, door de
+klantenservice als "dubbel" gearchiveerd). En een bericht via de router ná de
+reset komt nergens aan: CM geeft 201, maar opent een nieuwe routersessie die
+niet naar Robin gaat (getest 23 nov).
+
+Nu blijft de routersessie `ESCALATION_MAIL_FOLLOWUP_SEC` seconden open
+(standaard 120; de bedankjes kwamen 20–60 s na de doorzetting). In die tijd zet
+de poller alles wat de klant typt via `CM_FOLLOWUP_ADAPTER_ID` door naar
+hetzelfde gesprek in Robin, of de bot de tool nu aanroept of niet. Daarna sluit
+de poller de routersessie en mailt Robin het antwoord. Roept de bot de tool
+binnen `ESCALATION_REPEAT_WINDOW_MIN` minuten (standaard 10) opnieuw aan, dan
+komt er geen tweede gesprek; na het vervolgvenster zegt de bot dat de klant
+aanvullingen kan sturen door te antwoorden op de mail van de klantenservice.
+
+Antwoordt een collega binnen het vervolgvenster, dan stuurt Robin dat als
+chatbericht en niet per mail. De bridge sluit de routersessie dan meteen en
+zet `agent_reply.in_window` in het logboek: stuur dat antwoord in Robin opnieuw
+per e-mail. In het logboek verder: `escalate.mail_window`,
+`poll.forwarded`, `escalate.session_reset` en `escalate.repeat`.
 
 Vraagt een klant later in hetzelfde Zipchat-gesprek opnieuw om een collega, dan
 hergebruikt de bridge de gesloten sessie, reset hij de routing en stuurt hij

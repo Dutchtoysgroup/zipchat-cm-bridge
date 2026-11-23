@@ -209,14 +209,14 @@ export const config = {
    */
   repeatWindowMin: Number(opt("ESCALATION_REPEAT_WINDOW_MIN") ?? 10),
   /**
-   * Zoveel seconden blijft de routersessie na een doorzetting per e-mail open.
-   * Wat de klant in die tijd nog schrijft, zet de poller door naar hetzelfde
-   * gesprek in Robin; daarna volgt de reset en mailt Robin het antwoord. Na de
-   * reset komt een vervolgbericht nergens meer aan (getest 23 nov 2026). De
-   * bedankjes kwamen 20-60 s na de doorzetting. 0 = meteen resetten, zoals
-   * vóór 23 nov.
+   * Zoveel seconden blijft de routersessie na een doorzetting per e-mail open,
+   * zodat de poller vervolgberichten in hetzelfde Robin-gesprek zet. Standaard
+   * 0 (meteen resetten): Robin wijst het gesprek direct toe en stuurt ~9 s na de
+   * handover een automatisch bericht, de bevestigingsmail aan de klant. Met de
+   * sessie open ging dat als chatbericht en kreeg de klant geen mail (getest 23
+   * nov 2026). Alleen zinvol als Robin dat automatische bericht niet meer stuurt.
    */
-  mailFollowUpSec: Number(opt("ESCALATION_MAIL_FOLLOWUP_SEC") ?? 120),
+  mailFollowUpSec: Number(opt("ESCALATION_MAIL_FOLLOWUP_SEC") ?? 0),
 
   robin: {
     /**

@@ -12,6 +12,7 @@ vi.hoisted(() => {
   process.env.CM_ADAPTER_ID = "eigen-adapter";
   process.env.CM_FOLLOWUP_ADAPTER_ID = "web-adapter";
   process.env.CM_RESET_WAIT_MS = "0";
+  process.env.ESCALATION_MAIL_FOLLOWUP_SEC = "120";
 });
 
 /** Nep-Zipchat: onthoudt wie het gesprek heeft en weigert een bericht als de AI het heeft. */
@@ -250,5 +251,25 @@ describe("klant reageert na een doorzetting per e-mail", () => {
     await escalate({ ...klant, conversationId: "401" });
 
     expect(laatste()).toContain("mutationrequests");
+  });
+
+  it("reset zonder vervolgvenster meteen en belooft niets bij een herhaalde aanroep", async () => {
+    const venster = config.mailFollowUpSec;
+    (config as { mailFollowUpSec: number }).mailFollowUpSec = 0;
+    try {
+      await setMode("email");
+      berichten = [bericht(1, "user", "mijn vraag")];
+      const eerste = await escalate({ ...klant, conversationId: "404" });
+      expect(laatste()).toContain("reset");
+
+      cmUrls = [];
+      berichten.push(bericht(5, "user", "mijn ordernummer is 789"));
+      const tweede = await escalate({ ...klant, conversationId: "404" });
+      expect(tweede.sessionId).toBe(eerste.sessionId);
+      expect(tweede.message).toContain("NIET meer");
+      expect(cmUrls).toEqual([]);
+    } finally {
+      (config as { mailFollowUpSec: number }).mailFollowUpSec = venster;
+    }
   });
 });

@@ -109,29 +109,28 @@ antwoordt de klant op die mail, dan komt dat in hetzelfde gesprek (getest 30
 okt). Bij live chat blijft de sessie open, want daar moet het antwoord in het
 chatvenster komen.
 
-**Het vervolgvenster (sinds 23 nov 2026).** Klanten schrijven na een
-doorzetting per e-mail vaak nog iets: meestal "bedankt", soms een ordernummer,
-kortingscode of huisnummer. Tot 23 nov sloot de bridge de routersessie 5 s na
-de doorzetting. Riep de bot de tool daarna opnieuw aan, dan werd dat een tweede
-gesprek in Robin (17 van de 86 doorzettingen van 1 tot 22 nov, door de
-klantenservice als "dubbel" gearchiveerd). En een bericht via de router ná de
-reset komt nergens aan: CM geeft 201, maar opent een nieuwe routersessie die
-niet naar Robin gaat (getest 23 nov).
+**Na de doorzetting nog een bericht (sinds 23 nov 2026).** Klanten schrijven
+na een doorzetting per e-mail vaak nog iets: meestal "bedankt", soms een
+ordernummer, kortingscode of huisnummer. Riep de bot de tool daarna opnieuw
+aan, dan werd dat een tweede gesprek in Robin (17 van de 86 doorzettingen van 1
+tot 22 nov, door de klantenservice als "dubbel" gearchiveerd). Binnen
+`ESCALATION_REPEAT_WINDOW_MIN` minuten (standaard 10) komt er nu geen tweede
+gesprek. De bot reageert gewoon op de klant en zegt bij nieuwe informatie dat
+de klant die kan toevoegen door te antwoorden op de bevestigingsmail van de
+klantenservice; dat komt wel in hetzelfde gesprek. In het logboek:
+`escalate.repeat`.
 
-Nu blijft de routersessie `ESCALATION_MAIL_FOLLOWUP_SEC` seconden open
-(standaard 120; de bedankjes kwamen 20–60 s na de doorzetting). In die tijd zet
-de poller alles wat de klant typt via `CM_FOLLOWUP_ADAPTER_ID` door naar
-hetzelfde gesprek in Robin, of de bot de tool nu aanroept of niet. Daarna sluit
-de poller de routersessie en mailt Robin het antwoord. Roept de bot de tool
-binnen `ESCALATION_REPEAT_WINDOW_MIN` minuten (standaard 10) opnieuw aan, dan
-komt er geen tweede gesprek; na het vervolgvenster zegt de bot dat de klant
-aanvullingen kan sturen door te antwoorden op de mail van de klantenservice.
+Het bericht zelf in het bestaande gesprek zetten lukt niet (getest 23 nov):
 
-Antwoordt een collega binnen het vervolgvenster, dan stuurt Robin dat als
-chatbericht en niet per mail. De bridge sluit de routersessie dan meteen en
-zet `agent_reply.in_window` in het logboek: stuur dat antwoord in Robin opnieuw
-per e-mail. In het logboek verder: `escalate.mail_window`,
-`poll.forwarded`, `escalate.session_reset` en `escalate.repeat`.
+- **Na de reset** geeft de router 201, maar opent hij een nieuwe routersessie
+  die niet naar Robin gaat. Het bericht komt nergens aan.
+- **De routersessie langer openhouden** (`ESCALATION_MAIL_FOLLOWUP_SEC`, de
+  poller zet dan door en sluit daarna) breekt de bevestigingsmail: Robin wijst
+  het gesprek direct toe en stuurt ~9 s na de handover een automatisch bericht.
+  Met de sessie open gaat dat als chatbericht in plaats van per mail. De
+  bedankjes komen pas na 20–60 s. Daarom staat dit standaard op 0. Komt er
+  binnen het venster een antwoord uit Robin, dan sluit de bridge de sessie
+  meteen en logt hij `agent_reply.in_window`.
 
 Vraagt een klant later in hetzelfde Zipchat-gesprek opnieuw om een collega, dan
 hergebruikt de bridge de gesloten sessie, reset hij de routing en stuurt hij

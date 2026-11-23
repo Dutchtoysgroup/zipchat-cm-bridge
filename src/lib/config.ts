@@ -201,6 +201,13 @@ export const config = {
    * via de router.
    */
   escalationTarget: opt("ESCALATION_TARGET") === "robin" ? ("robin" as const) : ("cm" as const),
+  /**
+   * Zoveel minuten na een doorzetting per e-mail telt een nieuwe aanroep in
+   * hetzelfde Zipchat-gesprek als dubbel. De bot roept de tool vaak opnieuw
+   * aan als de klant "bedankt" zegt; dat gaf in Robin een tweede gesprek met
+   * alleen dat bedankje (17 van de 86 tussen 1 en 22 nov 2026). 0 zet dit uit.
+   */
+  repeatWindowMin: Number(opt("ESCALATION_REPEAT_WINDOW_MIN") ?? 10),
 
   robin: {
     /**

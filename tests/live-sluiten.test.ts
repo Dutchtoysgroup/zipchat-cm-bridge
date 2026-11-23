@@ -172,3 +172,46 @@ describe("vervolgbericht in een live chat", () => {
     expect(routerBerichten.flat()).toContain("nog een vraag");
   });
 });
+
+describe("klant reageert na een doorzetting per e-mail", () => {
+  const bericht = (id: number, role: string, message: string) => ({
+    id,
+    role,
+    message,
+    created_at: new Date(Date.now() - 60_000 + id).toISOString(),
+  });
+  const klant = { conversationId: "400", chatId: "22036", name: "Test Klant", email: "jan@voorbeeld.nl" };
+
+  it("zet het bedankje bij het bestaande gesprek in plaats van een tweede doorzetting", async () => {
+    await setMode("email");
+    berichten = [bericht(1, "user", "mijn vraag"), bericht(2, "assistant", "ik zet je door")];
+    const eerste = await escalate(klant);
+    // Wat het RouterSessionEnded-event na de routing-reset doet.
+    await store.updateSession(eerste.sessionId!, { status: "closed" });
+
+    routerBerichten = [];
+    cmUrls = [];
+    berichten.push(bericht(3, "assistant", "je vraag is doorgegeven"), bericht(4, "user", "Bedankt!"));
+    const tweede = await escalate(klant);
+
+    expect(tweede.ok).toBe(true);
+    expect(tweede.sessionId).toBe(eerste.sessionId);
+    expect(tweede.message).toContain("net al doorgezet");
+    expect(cmUrls.map((u) => u.split("/").pop())).toEqual(["web-adapter"]);
+    expect(routerBerichten).toEqual([["Bedankt!"]]);
+  });
+
+  it("maakt na het venster wel een nieuwe doorzetting", async () => {
+    await setMode("email");
+    berichten = [bericht(1, "user", "mijn vraag")];
+    const eerste = await escalate({ ...klant, conversationId: "401" });
+    const lang = new Date(Date.now() - (config.repeatWindowMin + 1) * 60_000);
+    await store.updateSession(eerste.sessionId!, { status: "closed", createdAt: lang });
+
+    cmUrls = [];
+    berichten.push(bericht(5, "user", "nieuwe vraag"));
+    await escalate({ ...klant, conversationId: "401" });
+
+    expect(cmUrls.map((u) => u.split("/").pop())).toContain("mutationrequests");
+  });
+});

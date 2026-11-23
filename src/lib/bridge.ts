@@ -166,6 +166,12 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
   }
 
   const existing = await store.getSessionByZipchatConversation(conversationId);
+  if (existing && isRecentMailHandover(existing)) {
+    const added = await addToMailHandover(existing, conv.data?.messages ?? []);
+    if (added) return added;
+    // Doorsturen mislukt: dan toch een nieuwe doorzetting, zodat wat de klant
+    // nog schreef niet verloren gaat.
+  }
   if (existing && (existing.status === "escalating" || existing.status === "active")) {
     await store.logEvent({
       sessionId: existing.id,
@@ -488,6 +494,78 @@ export async function escalate(input: EscalateInput): Promise<EscalateResult> {
     mode,
     mocked: sent.mocked,
     message: liveChat ? liveHandoverMessage() : mailHandoverMessage(),
+  };
+}
+
+/**
+ * Net per e-mail doorgezet? Na de doorzetting sluit de bridge de routersessie
+ * (routing/reset), en het RouterSessionEnded-event dat volgt zet de sessie op
+ * closed. Zegt de klant daarna "bedankt", dan roept de bot de tool vaak nog
+ * eens aan. Zonder deze controle werd dat een tweede doorzetting: in Robin een
+ * nieuw gesprek met alleen het bedankje, dat de klantenservice als "dubbel"
+ * archiveerde (nov 2026).
+ */
+function isRecentMailHandover(session: Session): boolean {
+  if (config.repeatWindowMin <= 0 || session.mode !== "email" || !session.cmChatId) return false;
+  if (session.status !== "active" && session.status !== "closed") return false;
+  return Date.now() - new Date(session.createdAt).getTime() < config.repeatWindowMin * 60_000;
+}
+
+/**
+ * Wat de klant na de doorzetting nog schreef, gaat als vervolgbericht naar het
+ * bestaande gesprek in Robin, via dezelfde adapter als bij live chat. Soms is
+ * het meer dan een bedankje: een kortingscode, een ordernummer, een
+ * huisnummer. Geeft null terug als doorsturen niet lukte.
+ */
+async function addToMailHandover(session: Session, messages: zipchat.ZipchatMessage[]): Promise<EscalateResult | null> {
+  const cursor = await store.getForwardCursor(session.id);
+  const sinceIso = (session.lastForwardedAt ?? session.createdAt).toISOString();
+  const nieuw = messages
+    .filter((m) => m.role === "user" && !m.manual_reply && isPending(m, cursor, sinceIso))
+    .sort(byMessageId);
+  const adapterId = config.cm.followUpAdapterId ?? config.cm.adapterId;
+
+  for (const m of nieuw) {
+    const text = zipchat.messageText(m);
+    const res = await cm.sendToRouter(
+      {
+        chat: cm.buildChat({
+          conversationClientId: session.cmConversationClientId ?? `zipchat:${session.zipchatConversationId}`,
+          clientName: session.customerName,
+          channel: mapChannel(session.channel as Channel),
+          chatId: session.cmChatId ?? undefined,
+        }),
+        conversationMessages: [cm.textMessage(text, "ClientOriginated")],
+      },
+      adapterId,
+    );
+    await store.logEvent({
+      sessionId: session.id,
+      direction: "bridge->cm",
+      kind: "escalate.repeat_forwarded",
+      ok: res.ok,
+      statusCode: res.status,
+      summary: res.ok
+        ? `Na de doorzetting nog geschreven, aan het bestaande gesprek toegevoegd: "${truncate(text)}"`
+        : `Toevoegen aan het bestaande gesprek mislukt (${res.error}); er komt een nieuwe doorzetting: "${truncate(text)}"`,
+      payload: { messageId: m.id, adapterId },
+    });
+    if (!res.ok) return null;
+    await markHandled(session.id, m);
+  }
+
+  await store.logEvent({
+    sessionId: session.id,
+    direction: "zipchat->bridge",
+    kind: "escalate.repeat",
+    summary: `Al doorgezet ${Math.round((Date.now() - new Date(session.createdAt).getTime()) / 1000)} s geleden — geen tweede gesprek in Robin${nieuw.length ? `, ${nieuw.length} bericht(en) toegevoegd` : ""}`,
+  });
+  return {
+    ok: true,
+    sessionId: session.id,
+    cmChatId: session.cmChatId ?? undefined,
+    mode: "email",
+    message: repeatHandoverMessage(),
   };
 }
 
@@ -1106,6 +1184,15 @@ function liveHandoverMessage(): string {
     "Je wordt zo geholpen door een van onze collega's, hier in dit chatvenster. Houd het venster open.",
     "",
     "Beantwoord de doorgezette vraag daarna niet meer zelf; je collega neemt het over.",
+  ].join("\n");
+}
+
+/** Al doorgezet: de bot moet gewoon op de klant reageren, niet alles herhalen. */
+function repeatHandoverMessage(): string {
+  return [
+    "Dit gesprek is net al doorgezet naar de klantenservice. Wat de klant daarna nog schreef, staat bij die vraag; er komt geen tweede melding.",
+    "Zeg niet opnieuw dat de vraag is doorgegeven en roep deze tool voor dezelfde vraag niet nog eens aan.",
+    "Reageer kort en vriendelijk op het laatste bericht van de klant, in de taal van het gesprek.",
   ].join("\n");
 }
 

@@ -109,6 +109,18 @@ en mailt Robin het antwoord; antwoordt de klant op die mail, dan komt dat in
 hetzelfde gesprek (getest 30 okt). Bij live chat blijft de sessie open, want
 daar moet het antwoord in het chatvenster komen.
 
+**Na de doorzetting nog een bericht (sinds 23 nov 2026).** Zegt de klant na
+een doorzetting per e-mail nog "bedankt", dan roept de bot de tool vaak opnieuw
+aan. Dat werd een tweede gesprek in Robin met alleen dat bedankje: 17 van de 86
+doorzettingen van 1 tot 22 nov, door de klantenservice als "dubbel"
+gearchiveerd. Soms stond er wel iets nuttigs in (een kortingscode, een
+ordernummer). Binnen `ESCALATION_REPEAT_WINDOW_MIN` minuten (standaard 10) na de
+doorzetting komt er daarom geen nieuwe doorzetting: wat de klant nog schreef,
+gaat als vervolgbericht via `CM_FOLLOWUP_ADAPTER_ID` naar het bestaande gesprek,
+en de bot reageert gewoon op de klant. Mislukt dat doorsturen, dan volgt toch
+een nieuwe doorzetting, zodat er niets verloren gaat. In het logboek:
+`escalate.repeat` en `escalate.repeat_forwarded`.
+
 Vraagt een klant later in hetzelfde Zipchat-gesprek opnieuw om een collega, dan
 hergebruikt de bridge de gesloten sessie, reset hij de routing en stuurt hij
 alleen de nieuwe berichten. In Robin wordt dat een nieuw gesprek.
